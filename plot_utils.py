@@ -16,53 +16,55 @@ def plot_profile(data, levels, ax=None, **kwargs):
     
     return pl
 
-def compare_profiles(data_arrays, labels, levels=None):
-    ax = pyplot.gca()
+def compare_profiles(data_arrays, level_arrays, labels=None, plot_differences=False, **kwargs):
+    figure = pyplot.figure()
+    ax = figure.add_subplot(111)
     
-    for icase, (data, label) in enumerate(zip(data_arrays, labels)):
-        if data.units == 'hPa' or data.units == 'mb':
-            attrs = data.attrs
-            data = 1e2 * data
-            data.attrs = attrs
-            data.attrs['units'] = 'Pa'
+    for icase, (data, levels, label) in enumerate(zip(data_arrays, level_arrays, labels)):
         
-        if levels is None:
-            from xarray import DataArray
-            levels = DataArray(range(len(data)), attrs={'long_name': 'Level index', 'units': 1})
-            
-        pl = ax.plot(data, levels, label=label)
-        ax.set_ylabel('%s (%s)'%(levels.long_name, levels.units))
-        ax.set_xlabel('%s (%s)'%(data.long_name, data.units))
+        # Figure out levels to plot against
+        #if levels is None:
+        #    from xarray import DataArray
+        #    levels = DataArray(range(len(data)), attrs={'long_name': 'Level index', 'units': 1})
         
-        if icase == 0:
-            data_cntl = data.copy(deep=True)
-        else:
-            ax_diff = ax.twiny()
-            #ax_diff = ax
-            data_diff = data - data_cntl
-            pl = ax_diff.plot(data_diff, levels, label='difference',
-                              color='0.5', linestyle='solid')
-                
-            # add a vertical line
-            pl_diff = ax_diff.plot([0, 0], [levels[0], levels[-1]], color='0.5', linestyle='dashed')
-            
-            # set limits
-            if ax_diff is not ax:
-                x2 = abs(data_diff).max()
-                x1 = -x2
-                ax_diff.set_xlim(x1, x2)
+        # Make plot for this case
+        pl = plot_profile(data, levels, label=label, **kwargs)
+        
+        # If adding a difference line, do all that...
+        if plot_differences is True:
+            if icase == 0:
+                data_cntl = data.copy(deep=True)
+            else:
+                ax_diff = ax.twiny()
+                data_diff = data - data_cntl
+                pl = ax_diff.plot(data_diff, levels, label='difference',
+                                  color='0.5', linestyle='solid')
 
-                # fix labels for difference axes
-                ax_diff.set_xlabel('Difference', color='0.5')
-                ax_diff.tick_params('x', colors='0.5')
-                ax_diff.ticklabel_format(axis='x', style='sci', scilimits=(-3, 3))
+                # add a vertical line
+                pl_diff = ax_diff.plot([0, 0], [levels[0], levels[-1]], color='0.5', linestyle='dashed')
 
-    y1, y2 = ax.get_ylim()
-    y1, y2 = max(y1, y2), min(y1, y2)
-    ax.set_ylim(y1, y2)
-    ax_diff.set_ylim(y1, y2)
+                # set limits
+                if ax_diff is not ax:
+                    x2 = abs(data_diff).max()
+                    x1 = -x2
+                    ax_diff.set_xlim(x1, x2)
+
+                    # fix labels for difference axes
+                    ax_diff.set_xlabel('Difference', color='0.5')
+                    ax_diff.tick_params('x', colors='0.5')
+                    ax_diff.ticklabel_format(axis='x', style='sci', scilimits=(-3, 3))
+
+    # Fix axes ticklabels
+    ax.ticklabel_format(style='sci', axis='x', scilimits=(-2,2))    
+
+    # Fix axes
+    if levels.units in ('hPa', 'mb', 'Pa'):
+        y1, y2 = ax.get_ylim()
+        y1, y2 = max(y1, y2), min(y1, y2)
+        ax.set_ylim(y1, y2)
+        if plot_differences: ax_diff.set_ylim(y1, y2)
     
-    return pl, pl_diff
+    return figure
 
 
 def plot_map(lon, lat, data, **kwargs):
@@ -184,7 +186,7 @@ def compare_maps(data_arrays, labels=None,
         # Make plot of this data array
         ax = figure.add_axes(axes.ravel()[icase])
         pl = plot_map(data.lon, data.lat, data.transpose('lat', 'lon'), 
-                      transform=crs.PlateCarree())
+                      transform=crs.PlateCarree(), vmin=vmin, vmax=vmax)
         
         # Label plot
         if labels is not None:
@@ -233,6 +235,25 @@ def compare_timeseries_2d(data_arrays, cases, **kwargs):
     return figure
 
 
+def compare_zonal_means(data_arrays, labels=None, **kwargs):
+    
+    figure = pyplot.figure()
+    ax = figure.add_subplot(111)
+    
+    for icase, data in enumerate(data_arrays):
+        
+        # Make plot
+        if labels is not None: label = labels[icase]
+        pl = ax.plot(data.lat, data, label=label, **kwargs)
+        
+    # Label using last used data
+    ax.set_xlabel('Latitude')
+    ax.set_ylabel('%s (%s)'%(data.long_name, data.units))
+    ax.legend()
+    
+    return figure
+
+    
 def compare_zonal_profiles(data_arrays, labels=None, nrows=None, ncols=None, **kwargs):
         
     if nrows is None: nrows = len(data_arrays)
