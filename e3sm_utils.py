@@ -149,9 +149,21 @@ def get_data(dataset, field):
         data = flux_up.isel(ilev=-1)
         data.attrs['long_name'] = 'Upward LW clearsky flux at surface'
         data.attrs['units'] = flux_up.attrs['units']
+    elif field == 'CLDLIQICE':
+        cldliq = get_data(dataset, 'CLDLIQ')
+        cldice = get_data(dataset, 'CLDICE')
+        data = cldliq + cldice
+        data.attrs = cldliq.attrs
+        data.attrs['long_name'] = 'Combined liq+ice condensate'
     else:
         raise NameError('%s not found in dataset.'%field)
     
+    # Adjust units if necessary
+    if field in ('TGCLDLWP', 'TGCLDIWP'):
+        if data.units == 'kg/m2':
+            data[:] = 1e3 * data[:]
+            data.attrs['units'] = 'g/m2'
+        
     return data
 
 
@@ -206,3 +218,27 @@ def read_files(*files, year_offset=None):
         
     # update our dataset with the fixed up dataset read in by this method
     return ds
+
+def area_average(data, weights, dims=data.dims):
+    # Calculate area-weighted global average
+    from xarray import broadcast
+    
+    # Need to broadcast weights to make sure they have the
+    # same size/shape as data. For example, data is (lat, lon)
+    # but we passed weights with shape (lat,), or data is
+    # (time, ncol) but we passed weights with shape (ncol,).
+    weights, *__ = broadcast(weights, data)
+    
+    # Mask weights consistent with data so we do not miscount
+    # missing columns
+    weights = weights.where(data.notnull())
+    
+    # Do the averaging        
+    data_mean = (weights * data).sum(dim=dims) / weights.sum(dim=dims)
+    
+    # Copy over attributes, which we lose in the averaging
+    # calculation
+    data_mean.attrs = data.attrs
+    
+    # Return averaged data
+    return data_mean
