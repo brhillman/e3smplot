@@ -178,6 +178,14 @@ def get_data(dataset, field):
         if data.units == 'kg/m2':
             data[:] = 1e3 * data[:]
             data.attrs['units'] = 'g/m2'
+    elif field in ('cltcalipso', 'cltcalipso_liq', 'cltcalipso_ice',
+                   'clcalipso',  'clcalipso_liq',  'clcalipso_ice'):
+        if data.units.lower() in ('1', 'fraction', 'none', '1 fraction'):
+            attrs = data.attrs
+            data = 100 * data
+            data.attrs = attrs
+            data.attrs['units'] = '%'
+          
         
     return data
 
@@ -259,3 +267,15 @@ def area_average(data, weights, dims=None):
     
     # Return averaged data
     return data_mean
+
+
+# Define a function to mask a list of data arrays consistent with one another
+def mask_consistent(data_arrays):
+    '''Mask a list of xarray.DataArrays so that they are consistent in terms
+       of missing data'''
+    for iarray in range(len(data_arrays)):
+        for jarray in range(len(data_arrays)):
+            if iarray == jarray: continue
+            data_arrays[iarray] = data_arrays[iarray].where(data_arrays[jarray].notnull())
+                                                            
+    return data_arrays
