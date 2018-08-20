@@ -198,15 +198,13 @@ def read_files(*files, year_offset=None):
         # simulations that set the initial year as 0001.
         # as a hackish solution, we can just adjust the units of the time
         # axis...first, find the current base year
-        time_units = ds['time'].units 
+        time_units = ds['time'].units
         base_year_idx = time_units.index('since ') + 6
         year = int(time_units[base_year_idx:base_year_idx+4])
 
         # add specified offset to base year
         new_year = year + year_offset
-        new_units = time_units.replace(
-            'since %04i'%year, 'since %04i'%new_year
-        )
+        new_units = time_units.replace('since %04i'%year, 'since %04i'%new_year)
 
         # update the time attributes
         ds['time'].attrs['units'] = new_units
@@ -219,14 +217,18 @@ def read_files(*files, year_offset=None):
     # update our dataset with the fixed up dataset read in by this method
     return ds
 
-def area_average(data, weights, dims=data.dims):
-    # Calculate area-weighted global average
-    from xarray import broadcast
+
+def area_average(data, weights, dims=None):
     
+    '''Calculate area-weighted global average'''
+      
+    if dims is None: dims = data.dims
+        
     # Need to broadcast weights to make sure they have the
     # same size/shape as data. For example, data is (lat, lon)
     # but we passed weights with shape (lat,), or data is
     # (time, ncol) but we passed weights with shape (ncol,).
+    from xarray import broadcast
     weights, *__ = broadcast(weights, data)
     
     # Mask weights consistent with data so we do not miscount
