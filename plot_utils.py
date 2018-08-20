@@ -67,6 +67,26 @@ def compare_profiles(data_arrays, level_arrays, labels=None, plot_differences=Fa
     return figure
 
 
+# define a function to set a circular plot area
+# We will make polar map plots using a sterographic projection. 
+# We would like for these to be round, but we need to define a 
+# function to fix the axes bounds when using the cartopy map 
+# projection library to make this happen.
+def cartopy_circular(ax):
+    import matplotlib.path as mpath
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    # Compute a circle in axes coordinates, which we can use as a boundary
+    # for the map. We can pan/zoom as much as we like - the boundary will be
+    # permanently circular.
+    theta = np.linspace(0, 2*np.pi, 100)
+    center, radius = [0.5, 0.5], 0.5
+    verts = np.vstack([np.sin(theta), np.cos(theta)]).T
+    circle = mpath.Path(verts * radius + center)
+    ax.set_boundary(circle, transform=ax.transAxes)
+    
+    
 def plot_map(lon, lat, data, **kwargs):
     # Fix longitude
     import numpy
@@ -153,7 +173,7 @@ def plot_map(lon, lat, data, **kwargs):
     
     # Make plot
     ax = pyplot.gca()
-    ax.set_global()
+    #ax.set_global()
     ax.coastlines()
     if 'ncol' in data.dims:
         pl = ax.tripcolor(new_lon, lat, data, **kwargs)
@@ -164,8 +184,9 @@ def plot_map(lon, lat, data, **kwargs):
 
 
 def compare_maps(data_arrays, labels=None, 
-                 ncols=None, nrows=None, 
-                 projection=crs.PlateCarree(), **kwargs):
+                 ncols=None, nrows=None,
+                 lat_bounds=None,
+                 projection=crs.PlateCarree(), vmin=None, vmax=None, **kwargs):
     
     # TODO: allow for difference plots
     
@@ -174,8 +195,8 @@ def compare_maps(data_arrays, labels=None,
     if nrows is None: nrows = 1
         
     # Find common mins and maxes
-    vmin = min([data.min().values for data in data_arrays])
-    vmax = max([data.max().values for data in data_arrays])
+    if vmin is None: vmin = min([data.min().values for data in data_arrays])
+    if vmax is None: vmax = max([data.max().values for data in data_arrays])
     
     # Open figure
     figure, axes = pyplot.subplots(nrows, ncols, subplot_kw=dict(projection=projection))
@@ -185,6 +206,12 @@ def compare_maps(data_arrays, labels=None,
         
         # Make plot of this data array
         ax = figure.add_axes(axes.ravel()[icase])
+        
+        # fix plot area; not sure why all this is needed, bugs in cartopy?
+        if lat_bounds is not None: 
+            ax.set_extent([-180, 180, lat_bounds[0], lat_bounds[1]], crs.PlateCarree())
+        if projection == crs.NorthPolarStereo(): cartopy_circular(ax)
+        
         pl = plot_map(data.lon, data.lat, data.transpose('lat', 'lon'), 
                       transform=crs.PlateCarree(), vmin=vmin, vmax=vmax)
         
