@@ -155,6 +155,21 @@ def get_data(dataset, field):
         data = cldliq + cldice
         data.attrs = cldliq.attrs
         data.attrs['long_name'] = 'Combined liq+ice condensate'
+        
+    # CALIPSO-simulated or CALIPSO-retrieved fields
+    elif field == 'cltcalipso':
+        data = get_data(dataset, 'CLDTOT_CAL')
+    elif field == 'cltcalipso_liq':
+        data = get_data(dataset, 'CLDTOT_CAL_LIQ')
+    elif field == 'cltcalipso_ice':
+        data = get_data(dataset, 'CLDTOT_CAL_ICE')
+    elif field == 'clcalipso':
+        data = get_data(dataset, 'CLD_CAL')
+    elif field == 'clcalipso_liq':
+        data = get_data(dataset, 'CLD_CAL_LIQ')
+    elif field == 'clcalipso_ice':
+        data = get_data(dataset, 'CLD_CAL_ICE')
+        
     else:
         raise NameError('%s not found in dataset.'%field)
     

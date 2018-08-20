@@ -178,7 +178,7 @@ def compare_maps(data_arrays, labels=None,
     vmax = max([data.max().values for data in data_arrays])
     
     # Open figure
-    figure, axes = pyplot.subplots(ncols, nrows, subplot_kw=dict(projection=projection))
+    figure, axes = pyplot.subplots(nrows, ncols, subplot_kw=dict(projection=projection))
     
     # Loop and plot
     for icase, data in enumerate(data_arrays):
