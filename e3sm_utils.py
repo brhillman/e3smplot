@@ -210,8 +210,9 @@ def read_files(*files, year_offset=None):
         # average of the time_bnds variable.
         #ds['time_bnds'].attrs['units'] = ds['time'].attrs['units']
         bnd_dim = list(set(ds['time_bnds'].dims) - set(('time',)))
+        attrs = ds['time'].attrs
         ds['time'] = ds['time_bnds'].astype('int64').mean(bnd_dim).astype('datetime64[ns]')
-           
+        ds['time'].attrs = attrs
         
     # manually decode the times
     from xarray import decode_cf
