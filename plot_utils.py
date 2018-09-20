@@ -2,6 +2,20 @@
 from matplotlib import pyplot
 from cartopy import crs
 
+def plot_field(dataset, field, plot_type='map', **kwargs):
+
+    # Get data
+    from e3sm_utils import get_data
+    data = get_data(dataset, field)
+
+    if plot_type == 'map':
+        lon = get_data(dataset, 'lon')
+        lat = get_data(dataset, 'lat')
+        pl = plot_map(lon, lat, data, **kwargs)
+
+    return pl
+    
+
 def plot_profile(data, levels, ax=None, **kwargs):
     
     # Get axes to plot in if not passed
@@ -87,30 +101,10 @@ def cartopy_circular(ax):
     ax.set_boundary(circle, transform=ax.transAxes)
     
     
-def plot_map(lon, lat, data, **kwargs):
-    # Fix longitude
-    import numpy
-    new_lon = numpy.where(lon > 180, lon - 360, lon)
-    
-    # Make plot
-    ax = pyplot.gca()
-    ax.set_global()
-    ax.coastlines()
-    if 'ncol' in data.dims:
-        pl = ax.tripcolor(new_lon, lat, data, **kwargs)
-    else:
-        pl = ax.pcolormesh(new_lon, lat, data.transpose('lat', 'lon'), **kwargs)
-        
-    # Add colorbar
-    cb = pyplot.colorbar(
-        pl, orientation='horizontal', shrink=0.8, pad=0.02, 
-        label='%s (%s)'%(data.long_name, data.units)
-    )
-    
-    return pl, cb
 
 
-def compare_maps_diff(lon, lat, data1, data2, labels, **kwargs):
+
+def compare_maps_diff(lon, lat, data1, data2, labels=('case 1', 'case 2'), **kwargs):
     
     from matplotlib import pyplot
     from cartopy import crs
@@ -180,7 +174,13 @@ def plot_map(lon, lat, data, **kwargs):
     else:
         pl = ax.pcolormesh(new_lon, lat, data.transpose('lat', 'lon'), **kwargs)
     
-    return pl
+    # Add colorbar
+    cb = pyplot.colorbar(
+        pl, orientation='horizontal', shrink=0.8, pad=0.02, 
+        label='%s (%s)'%(data.long_name, data.units)
+    )
+    
+    return pl, cb
 
 
 def compare_maps(data_arrays, labels=None, 
@@ -212,7 +212,7 @@ def compare_maps(data_arrays, labels=None,
             ax.set_extent([-180, 180, lat_bounds[0], lat_bounds[1]], crs.PlateCarree())
         if projection == crs.NorthPolarStereo(): cartopy_circular(ax)
         
-        pl = plot_map(data.lon, data.lat, data.transpose('lat', 'lon'), 
+        pl = plot_map(data.lon, data.lat, data, 
                       transform=crs.PlateCarree(), vmin=vmin, vmax=vmax)
         
         # Label plot
@@ -228,6 +228,86 @@ def compare_maps(data_arrays, labels=None,
 
     return figure
 
+
+def compare_maps_from_ds(datasets, field, plot_diffs=False, **kwargs):
+    
+    from e3sm_utils import get_data
+    
+    # Get datarrays
+    data_arrays = []
+    for ds in datasets:
+        da = get_data(ds, field)
+    
+        # If lat and lon are not packaged with data_arrays as coordinate variables,
+        # then package them up as attributes
+        if not hasattr(da, 'lon'):
+            da['lon'] = get_data(ds, 'lon')
+        if not hasattr(da, 'lat'):
+            da['lat'] = ds['lat'] #get_data(ds, 'lat')
+                        
+        # Append this DataArray to list
+        data_arrays.append(da)
+        
+    # Now we can call our compare_maps function that operates on data_arrays        
+    if plot_diffs:
+        return compare_maps_diff(data_arrays[0].lon, data_arrays[0].lat, *data_arrays, **kwargs)
+    else:
+        return compare_maps(data_arrays, **kwargs)
+    
+
+    
+def compare_maps_from_datasets(datasets, field, labels=None, projection=crs.PlateCarree(), 
+                               ncols=None, nrows=None, vmin=None, vmax=None,
+                               lat_bounds=None, lon_bounds=None, plot_differences=False,
+                               **kwargs):
+    
+    # Figure out size of figure
+    if ncols is None: ncols = len(datasets)
+    if nrows is None: nrows = 1
+        
+    # Find common mins and maxes; first need data_arrays for all cases
+    from e3sm_utils import get_data
+    data_arrays = [get_data(dataset, field) for dataset in datasets]
+    if vmin is None: vmin = min([data.min().values for data in data_arrays])
+    if vmax is None: vmax = max([data.max().values for data in data_arrays])
+    
+    # Open figure
+    figure, axes = pyplot.subplots(nrows, ncols, subplot_kw=dict(projection=projection))
+    
+    # Loop and plot
+    for icase, dataset in enumerate(datasets):
+        
+        # Get data
+        data = get_data(dataset, field)
+        
+        # Get coordinate variables
+        lon = get_data(dataset, 'lon')
+        lat = get_data(dataset, 'lat')
+        
+        # Make plot of this data array
+        ax = figure.add_axes(axes.ravel()[icase])
+        
+        # fix plot area; not sure why all this is needed, bugs in cartopy?
+        if lat_bounds is not None: 
+            ax.set_extent([-180, 180, lat_bounds[0], lat_bounds[1]], crs.PlateCarree())
+        if projection == crs.NorthPolarStereo(): cartopy_circular(ax)
+        
+        # Make plot
+        pl = plot_map(lon, lat, data, 
+                      transform=crs.PlateCarree(), vmin=vmin, vmax=vmax)
+        
+        # Label plot
+        if labels is not None:
+            ax.set_title(labels[icase])
+        elif 'case' in data.attrs:
+            ax.set_title(data.case)
+            
+    # Common colorbar
+    cb = pyplot.colorbar(pl, ax=axes.ravel().tolist(),
+                         orientation='horizontal', shrink=0.8, pad=0.02, 
+                         label='%s (%s)'%(data.long_name, data.units))
+
+    return figure
             
 def compare_timeseries_2d(data_arrays, cases, **kwargs):
     from matplotlib import pyplot
