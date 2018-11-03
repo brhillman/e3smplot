@@ -160,27 +160,63 @@ def compare_maps_diff(lon, lat, data1, data2, labels=('case 1', 'case 2'), **kwa
     return figure
 
 
-def plot_map(lon, lat, data, **kwargs):
-    # Fix longitude
+def plot_map_native(lon_corners, lat_corners, data, **kwargs):
+    from matplotlib import pyplot, patches, path    
+    import numpy
+    
+    # Fix longitude coordinates; we need longitudes to run from
+    # -180 to 180, not from 0 to 360
+    lon_corners.values = numpy.where(lon_corners > 180, lon_corners - 360, lon_corners)
+
+    # Loop over GLL nodes and create paths that describe the boundaries
+    # of each node; collect these into a list to plot all at once
+    path_list = []
+    for icol in range(lon_corners.shape[0]):
+       
+        # Get corners for this node
+        x_corners = lon_corners[icol,:].values
+        y_corners = lat_corners[icol,:].values
+        
+        # Repeat first vertex at end of array to close the path
+        x_corners = numpy.append(x_corners, x_corners[0])
+        y_corners = numpy.append(y_corners, y_corners[0])
+            
+        # Create paths connecting the corners and append to list
+        vertices = numpy.column_stack([x_corners, y_corners])
+        path_list.append(path.Path(vertices, closed=True))
+        
+    # Plot collection of patches
+    from matplotlib.collections import PathCollection
+    collection = PathCollection(path_list, transform=crs.Geodetic(), **kwargs)
+    collection.set_array(data)
+    
+    ax = pyplot.gca()
+    pl = ax.add_collection(collection)
+    
+    return pl
+
+
+def plot_map(lon, lat, data, lon_corners=None, lat_corners=None, **kwargs):
+
+    # Fix longitudes
     import numpy
     new_lon = numpy.where(lon > 180, lon - 360, lon)
     
-    # Make plot
+    # Setup plot axes
     ax = pyplot.gca()
-    #ax.set_global()
+    ax.set_global()
     ax.coastlines()
-    if 'ncol' in data.dims:
+
+    # Make plot
+    if all([v is not None for v in (lon_corners, lat_corners)]):
+        pl = plot_map_native(lon_corners, lat_corners, data, **kwargs)
+    elif 'ncol' in data.dims:
         pl = ax.tripcolor(new_lon, lat, data, **kwargs)
     else:
         pl = ax.pcolormesh(new_lon, lat, data.transpose('lat', 'lon'), **kwargs)
     
-    # Add colorbar
-    cb = pyplot.colorbar(
-        pl, orientation='horizontal', shrink=0.8, pad=0.02, 
-        label='%s (%s)'%(data.long_name, data.units)
-    )
-    
-    return pl, cb
+    # Return plot handle
+    return pl
 
 
 def compare_maps(data_arrays, labels=None, 
@@ -414,3 +450,4 @@ def suplabels(xlabel=None, ylabel=None, xpad=None, ypad=None):
     if xlabel is not None: ax_common.set_xlabel(xlabel, labelpad=xpad)
     if ylabel is not None: ax_common.set_ylabel(ylabel, labelpad=ypad)
     return ax_common
+
