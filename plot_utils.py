@@ -122,7 +122,7 @@ def compare_maps_diff(lon, lat, data1, data2, labels=('case 1', 'case 2'), **kwa
     # Loop over cases and plot
     for icase, (data, case) in enumerate(zip((data1, data2), labels)):
         ax = figure.add_axes(axes[icase])
-        pl, cb = plot_map(
+        pl = plot_map(
             lon, lat, data, vmin=vmin, vmax=vmax, 
             transform=crs.PlateCarree(), 
             **kwargs
@@ -131,6 +131,10 @@ def compare_maps_diff(lon, lat, data1, data2, labels=('case 1', 'case 2'), **kwa
         # Label plot
         ax.set_title('%s (min = %.3f, max = %.3f)'%(
                      case, data.min().values, data.max().values))
+
+        # Add a colorbar
+        cb = pyplot.colorbar(pl, ax=ax, orientation='horizontal', 
+                             label='%s (%s)'%(data.long_name, data.units))
     
         # Plot differences
         if icase == 0:
@@ -146,7 +150,7 @@ def compare_maps_diff(lon, lat, data1, data2, labels=('case 1', 'case 2'), **kwa
             
             # plot
             ax = figure.add_axes(axes[-1])
-            pl, cb = plot_map(
+            pl = plot_map(
                 lon, lat, data_diff, 
                 cmap='RdBu_r', vmin=vmin, vmax=vmax,
                 transform=crs.PlateCarree(),
@@ -156,6 +160,10 @@ def compare_maps_diff(lon, lat, data1, data2, labels=('case 1', 'case 2'), **kwa
                 data_diff.min().values, data_diff.max().values
             ))
             
+            # Add a colorbar
+            cb = pyplot.colorbar(pl, ax=ax, orientation='horizontal', 
+                                 label='%s (%s)'%(data.long_name, data.units))
+    
     # Return figure object
     return figure
 
@@ -211,9 +219,9 @@ def plot_map(lon, lat, data, lon_corners=None, lat_corners=None, **kwargs):
     if all([v is not None for v in (lon_corners, lat_corners)]):
         pl = plot_map_native(lon_corners, lat_corners, data, **kwargs)
     elif 'ncol' in data.dims:
-        pl = ax.tripcolor(new_lon, lat, data, **kwargs)
+        pl = ax.tripcolor(new_lon.squeeze(), lat.squeeze(), data.squeeze(), **kwargs)
     else:
-        pl = ax.pcolormesh(new_lon, lat, data.transpose('lat', 'lon'), **kwargs)
+        pl = ax.pcolormesh(new_lon.squeeze(), lat.squeeze(), data.squeeze().transpose('lat', 'lon'), **kwargs)
     
     # Return plot handle
     return pl
