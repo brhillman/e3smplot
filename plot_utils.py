@@ -104,14 +104,14 @@ def cartopy_circular(ax):
 
 
 
-def compare_maps_diff(lon, lat, data1, data2, labels=('case 1', 'case 2'), **kwargs):
+def compare_maps_diff(lon, lat, data1, data2, labels=('case 1', 'case 2'), ncols=3, nrows=1, **kwargs):
     
     from matplotlib import pyplot
     from cartopy import crs
     
     # setup figure
     figure, axes = pyplot.subplots(
-        1, 3, figsize=(15, 3), 
+        nrows, ncols, figsize=(15, 3), 
         subplot_kw=dict(projection=crs.PlateCarree())
     )
     
@@ -347,9 +347,10 @@ def compare_maps_from_datasets(datasets, field, labels=None, projection=crs.Plat
             ax.set_title(data.case)
             
     # Common colorbar
-    cb = pyplot.colorbar(pl, ax=axes.ravel().tolist(),
-                         orientation='horizontal', shrink=0.8, pad=0.02, 
-                         label='%s (%s)'%(data.long_name, data.units))
+    if not plot_diffs:
+        cb = pyplot.colorbar(pl, ax=axes.ravel().tolist(),
+                             orientation='horizontal', shrink=0.8, pad=0.02, 
+                             label='%s (%s)'%(data.long_name, data.units))
 
     return figure
             
@@ -386,16 +387,68 @@ def compare_timeseries_2d(data_arrays, cases, **kwargs):
     return figure
 
 
-def compare_zonal_means(data_arrays, labels=None, **kwargs):
+def calculate_zonal_mean(data, weights, old_lat, lat_edges=None):
     
+    import numpy as numpy
+    
+    # Mask data weights
+    weights = weights.where(data.notnull())
+    
+    # Calculate new latitudes
+    if lat_edges is None:
+        lat_edges = numpy.linspace(-90, 90, 31)
+        
+    # Calculating zonal mean for each latitude by binning data according to lat values
+    data_zonal = numpy.zeros(len(lat_edges) - 1)
+    lat_centers = numpy.zeros(len(lat_edges) - 1)
+    for ilat in range(len(lat_edges) - 1):
+        
+        # Find latitude bounds
+        lat1 = lat_edges[ilat]
+        lat2 = lat_edges[ilat+1]
+        
+        # Calculate latitude centers from bounds
+        lat_centers[ilat] = (lat_edges[ilat+1] + lat_edges[ilat]) / 2.0
+
+        # Calculate mean for this latitude band
+        data_band = data.where(old_lat > lat1).where(old_lat <= lat2)
+        weights_band = weights.where(old_lat > lat1).where(old_lat <= lat2)
+        data_zonal[ilat] = (weights_band * data_band).sum(dim='ncol') / weights_band.sum(dim='ncol')
+        
+    return data_zonal, lat_centers
+
+
+def compare_zonal_means(datasets, field, labels=None, **kwargs):
+
     figure = pyplot.figure()
     ax = figure.add_subplot(111)
-    
-    for icase, data in enumerate(data_arrays):
+
+    for icase, dataset in enumerate(datasets):
+
+        # Get data
+        from e3sm_utils import get_data
+        data = get_data(dataset, field)
+        area = get_data(dataset, 'area')
+        lat = get_data(dataset, 'lat')
+        
+        # Get area weights for averaging
+        from xarray import broadcast
+        weights, *__ = broadcast(area, data)
+
+        # Calculate zonal means
+        data_zonal, lat_centers = calculate_zonal_mean(data, weights, lat)
         
         # Make plot
-        if labels is not None: label = labels[icase]
-        pl = ax.plot(data.lat, data, label=label, **kwargs)
+        if labels is not None: 
+            label = labels[icase]
+        else:
+            if 'casename' in dataset.attrs.keys():
+                label = dataset.attrs['casename']
+            elif 'case' in dataset.attrs.keys():
+                label = dataset.attrs['case']
+            else:
+                raise NameError('No valid label.')
+        pl = ax.plot(lat_centers, data_zonal, label=label, **kwargs)
         
     # Label using last used data
     ax.set_xlabel('Latitude')
