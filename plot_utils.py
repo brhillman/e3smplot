@@ -399,8 +399,11 @@ def calculate_zonal_mean(data, weights, old_lat, lat_edges=None):
         lat_edges = numpy.linspace(-90, 90, 31)
         
     # Calculating zonal mean for each latitude by binning data according to lat values
-    data_zonal = numpy.zeros(len(lat_edges) - 1)
     lat_centers = numpy.zeros(len(lat_edges) - 1)
+    if 'lev' in data.dims:
+        data_zonal = numpy.zeros([len(lat_edges) - 1, len(data['lev'])])
+    else:
+        data_zonal = numpy.zeros(len(lat_edges) - 1)
     for ilat in range(len(lat_edges) - 1):
         
         # Find latitude bounds
@@ -413,8 +416,26 @@ def calculate_zonal_mean(data, weights, old_lat, lat_edges=None):
         # Calculate mean for this latitude band
         data_band = data.where(old_lat > lat1).where(old_lat <= lat2)
         weights_band = weights.where(old_lat > lat1).where(old_lat <= lat2)
-        data_zonal[ilat] = (weights_band * data_band).sum(dim='ncol') / weights_band.sum(dim='ncol')
+        data_zonal[ilat, ...] = (weights_band * data_band).sum(dim='ncol') / weights_band.sum(dim='ncol')
         
+    # Turn these into DataArrays
+    from xarray import DataArray
+    lat_centers = DataArray(
+        lat_centers,
+        dims=('lat',),
+        attrs={'long_name': 'Latitude', 'units': 'Degrees north'}
+    )
+    if 'lev' in data.dims:
+        dims = ('lat', 'lev')
+        coords = {'lat': lat_centers, 'lev': data.lev}
+    else:
+        dims = ('lat')
+        coords = {'lat': lat_centers}
+
+    data_zonal = DataArray(
+        data_zonal,
+        dims=dims, coords=coords, attrs=data.attrs
+    )
     return data_zonal, lat_centers
 
 
@@ -448,6 +469,7 @@ def compare_zonal_means(datasets, field, labels=None, **kwargs):
                 label = dataset.attrs['case']
             else:
                 raise NameError('No valid label.')
+
         pl = ax.plot(lat_centers, data_zonal, label=label, **kwargs)
         
     # Label using last used data
@@ -458,7 +480,115 @@ def compare_zonal_means(datasets, field, labels=None, **kwargs):
     return figure
 
     
-def compare_zonal_profiles(data_arrays, labels=None, nrows=None, ncols=None, **kwargs):
+def compare_zonal_profiles(datasets, field, labels=None, 
+                           nrows=None, ncols=None, 
+                           common_colorbar=False,
+                           plot_diffs=True, **kwargs):
+        
+    if nrows is None: 
+        if plot_diffs is True:
+            nrows = len(datasets) + 1
+        else:
+            nrows = len(datasets)
+    if ncols is None: ncols = 1 #len(data_arrays)
+    figure, axes = pyplot.subplots(nrows, ncols, sharex=True, sharey=True, figsize=(5*ncols, 3*nrows))
+
+    # First, calculate zonal averages and build list of data_arrays to iterate over
+    from e3smplot.e3sm_utils import get_data
+    data_arrays = []
+    latitudes = []
+    for dataset in datasets:
+        data = get_data(dataset, field)
+        area = get_data(dataset, 'area')
+        lat = get_data(dataset, 'lat')
+
+        from xarray import broadcast
+        weights, *__ = broadcast(area, data)
+        data_zonal, lat_zonal = calculate_zonal_mean(data, weights, lat)
+        data_arrays.append(data_zonal)
+        latitudes.append(lat_zonal)
+
+    # Find min and max over all data arrays
+    vmin = min([data.min().values for data in data_arrays])
+    vmax = max([data.max().values for data in data_arrays])
+    
+    # Loop and plot
+    for icase, (data, lat) in enumerate(zip(data_arrays, latitudes)):
+                
+        # Make plot
+        ax = figure.add_axes(axes.ravel()[icase])
+        pl = ax.pcolormesh(
+            lat, data.lev, data.transpose(data.lev.name, data.lat.name),
+            vmin=vmin, vmax=vmax, cmap='viridis'
+        )
+        cb = pyplot.colorbar(
+            pl, ax=ax, orientation='horizontal',
+            label='%s (%s)'%(data.long_name, data.units),
+            pad=0.2,
+        )
+        
+        # Label this plot
+        if labels is not None:
+            ax.set_title(labels[icase])
+        elif 'case' in dataset.attrs:
+            ax.set_title(dataset.case)
+        elif 'casename' in dataset.attrs:
+            ax.set_title(dataset.casename)
+    
+        ax.set_xlabel('Latitude')
+        ax.set_ylabel('Hybrid level')
+
+        # Maybe plot diffs
+        if plot_diffs:
+            if icase == 0:
+                data_cntl = data.copy(deep=True)
+            else:
+                data_diff = data - data_cntl
+                data_diff.attrs = data.attrs
+
+                # Find min and max
+                vmax = abs(data_diff).max().values
+                vmin = -vmax
+
+                # Plot diff
+                ax = figure.add_axes(axes.ravel()[-1])
+                pl = ax.pcolormesh(
+                    lat, data_diff.lev, data_diff.transpose(data_diff.lev.name, data_diff.lat.name),
+                    vmin=vmin, vmax=vmax, cmap='RdBu_r'
+                )
+                cb = pyplot.colorbar(
+                    pl, ax=ax, orientation='horizontal',
+                    label='%s (%s)'%(data_diff.long_name, data_diff.units),
+                    pad=0.2,
+                )
+
+                # Label this plot
+                dmin = data_diff.min().values
+                dmax = data_diff.max().values
+                davg = data_diff.mean().values
+                ax.set_title('Difference (%0.2e, %0.2e, %0.2e)'%(dmin, dmax, davg))
+                
+                ax.set_xlabel('Latitude')
+                ax.set_ylabel('Hybrid level')
+
+    # Make a common label axes
+    #ax_common = suplabels(xlabel='Latitude', ylabel=data.lev.name)
+
+    #figure.subplots_adjust(hspace=0.1)
+    
+    if common_colorbar:
+        cb = pyplot.colorbar(
+            pl, ax=axes.ravel().tolist(),
+            orientation='horizontal', 
+            label='%s (%s)'%(data.long_name, data.units),
+            shrink=0.8
+        )
+    ax.set_ylim(ax.get_ylim()[::-1])
+    
+    return figure
+
+
+def compare_zonal_profiles_da(data_arrays, labels=None, nrows=None, ncols=None, **kwargs):
         
     if nrows is None: nrows = len(data_arrays)
     if ncols is None: ncols = 1 #len(data_arrays)
