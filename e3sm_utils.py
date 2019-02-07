@@ -244,7 +244,7 @@ def read_files(*files, year_offset=None):
 
 def area_average(data, weights, dims=None):
     
-    '''Calculate area-weighted global average'''
+    '''Calculate area-weighted average over dims.'''
       
     if dims is None: dims = data.dims
         
