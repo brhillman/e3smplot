@@ -185,7 +185,12 @@ def get_data(dataset, field):
             data = 100 * data
             data.attrs = attrs
             data.attrs['units'] = '%'
-          
+    elif field in ('PRECC', 'PRECL'):
+        if data.attrs['units'].lower() == 'm/s':
+            attrs = data.attrs
+            data = 60 * 60 * 24 * 1e3 * data
+            data.attrs = attrs
+            data.attrs['units'] = 'mm/day'
         
     return data
 
@@ -210,9 +215,9 @@ def read_files(*files, year_offset=None):
         # average of the time_bnds variable.
         #ds['time_bnds'].attrs['units'] = ds['time'].attrs['units']
         bnd_dim = list(set(ds['time_bnds'].dims) - set(('time',)))
-        attrs = ds['time'].attrs
+        #attrs = ds['time'].attrs
         ds['time'] = ds['time_bnds'].astype('int64').mean(bnd_dim).astype('datetime64[ns]')
-        ds['time'].attrs = attrs
+        #ds['time'].attrs = attrs
         
     # manually decode the times
     from xarray import decode_cf
@@ -222,18 +227,21 @@ def read_files(*files, year_offset=None):
         # simulations that set the initial year as 0001.
         # as a hackish solution, we can just adjust the units of the time
         # axis...first, find the current base year
-        time_units = ds['time'].units
+        time_units = ds['time'].units 
         base_year_idx = time_units.index('since ') + 6
         year = int(time_units[base_year_idx:base_year_idx+4])
 
         # add specified offset to base year
         new_year = year + year_offset
-        new_units = time_units.replace('since %04i'%year, 'since %04i'%new_year)
+        new_units = time_units.replace(
+            'since %04i'%year, 'since %04i'%new_year
+        )
 
         # update the time attributes
         ds['time'].attrs['units'] = new_units
         ds['time_bnds'].attrs['units'] = new_units
         ds['time'].attrs['units_note'] = 'added a %i year offset to units to allow decoding with pandas'%year_offset
+     
             
     # Finally, decode the dataset
     ds = decode_cf(ds)
