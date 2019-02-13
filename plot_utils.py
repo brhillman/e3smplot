@@ -2,10 +2,11 @@
 from matplotlib import pyplot
 from cartopy import crs
 
+from .e3sm_utils import get_data
+
 def plot_field(dataset, field, plot_type='map', **kwargs):
 
     # Get data
-    from e3sm_utils import get_data
     data = get_data(dataset, field)
 
     if plot_type == 'map':
@@ -282,12 +283,11 @@ def compare_maps(data_arrays, labels=None,
 
 def compare_maps_from_ds(datasets, field, plot_diffs=False, **kwargs):
     
-    from e3sm_utils import get_data
-    
     # Get datarrays
     data_arrays = []
     for ds in datasets:
         da = get_data(ds, field)
+        print(field, da.attrs['units'])
     
         # If lat and lon are not packaged with data_arrays as coordinate variables,
         # then package them up as attributes
@@ -317,7 +317,6 @@ def compare_maps_from_datasets(datasets, field, labels=None, projection=crs.Plat
     if nrows is None: nrows = 1
         
     # Find common mins and maxes; first need data_arrays for all cases
-    from e3sm_utils import get_data
     data_arrays = [get_data(dataset, field) for dataset in datasets]
     if vmin is None: vmin = min([data.min().values for data in data_arrays])
     if vmax is None: vmax = max([data.max().values for data in data_arrays])
@@ -455,7 +454,6 @@ def compare_zonal_means(datasets, field, labels=None, **kwargs):
     for icase, dataset in enumerate(datasets):
 
         # Get data
-        from e3sm_utils import get_data
         data = get_data(dataset, field)
         area = get_data(dataset, 'area')
         lat = get_data(dataset, 'lat')
@@ -502,7 +500,6 @@ def compare_zonal_profiles(datasets, field, labels=None,
     figure, axes = pyplot.subplots(nrows, ncols, sharex=True, sharey=True, figsize=(5*ncols, 3*nrows))
 
     # First, calculate zonal averages and build list of data_arrays to iterate over
-    from e3smplot.e3sm_utils import get_data
     data_arrays = []
     latitudes = []
     for dataset in datasets:
