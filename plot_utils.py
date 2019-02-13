@@ -230,7 +230,8 @@ def plot_map(lon, lat, data, lon_corners=None, lat_corners=None, **kwargs):
 def compare_maps(data_arrays, labels=None, 
                  ncols=None, nrows=None,
                  lat_bounds=None,
-                 projection=crs.PlateCarree(), vmin=None, vmax=None, **kwargs):
+                 projection=crs.PlateCarree(), 
+                 vmin=None, vmax=None, label_minmax=False, **kwargs):
     
     # TODO: allow for difference plots
     
@@ -243,7 +244,7 @@ def compare_maps(data_arrays, labels=None,
     if vmax is None: vmax = max([data.max().values for data in data_arrays])
     
     # Open figure
-    figure, axes = pyplot.subplots(nrows, ncols, subplot_kw=dict(projection=projection))
+    figure, axes = pyplot.subplots(nrows, ncols, subplot_kw=dict(projection=projection), figsize=(15,5))
     
     # Loop and plot
     for icase, data in enumerate(data_arrays):
@@ -260,10 +261,15 @@ def compare_maps(data_arrays, labels=None,
                       transform=crs.PlateCarree(), vmin=vmin, vmax=vmax)
         
         # Label plot
-        if labels is not None:
-            ax.set_title(labels[icase])
-        elif 'case' in data.attrs:
-            ax.set_title(data.case)
+        if labels is None:
+            if 'case' in data.attrs: label = data.case
+        else:
+            label = labels[icase]
+
+        if label_minmax:
+            label = '%s (%.2e, %.2e)'%(label, data.min().values, data.max().values)
+
+        ax.set_title(label)
             
     # Common colorbar
     cb = pyplot.colorbar(pl, ax=axes.ravel().tolist(),
