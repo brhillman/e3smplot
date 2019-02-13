@@ -258,7 +258,8 @@ def compare_maps(data_arrays, labels=None,
         if projection == crs.NorthPolarStereo(): cartopy_circular(ax)
         
         pl = plot_map(data.lon, data.lat, data, 
-                      transform=crs.PlateCarree(), vmin=vmin, vmax=vmax)
+                      transform=crs.PlateCarree(), 
+                      vmin=vmin, vmax=vmax, **kwargs)
         
         # Label plot
         if labels is None:
@@ -344,7 +345,8 @@ def compare_maps_from_datasets(datasets, field, labels=None, projection=crs.Plat
         
         # Make plot
         pl = plot_map(lon, lat, data, 
-                      transform=crs.PlateCarree(), vmin=vmin, vmax=vmax)
+                      transform=crs.PlateCarree(), 
+                      vmin=vmin, vmax=vmax, **kwargs)
         
         # Label plot
         if labels is not None:
@@ -525,7 +527,7 @@ def compare_zonal_profiles(datasets, field, labels=None,
         ax = figure.add_axes(axes.ravel()[icase])
         pl = ax.pcolormesh(
             lat, data.lev, data.transpose(data.lev.name, data.lat.name),
-            vmin=vmin, vmax=vmax, cmap='viridis'
+            vmin=vmin, vmax=vmax, **kwargs
         )
         cb = pyplot.colorbar(
             pl, ax=ax, orientation='horizontal',
@@ -610,7 +612,7 @@ def compare_zonal_profiles_da(data_arrays, labels=None, nrows=None, ncols=None, 
         ax = figure.add_axes(axes.ravel()[icase])
         pl = ax.pcolormesh(
             data.lat, data.lev, data.transpose(data.lev.name, data.lat.name),
-            vmin=vmin, vmax=vmax, cmap='viridis'
+            vmin=vmin, vmax=vmax, **kwargs
         )
         
         # Label this plot
