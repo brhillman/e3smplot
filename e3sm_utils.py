@@ -176,7 +176,9 @@ def get_data(dataset, field):
     # Adjust units if necessary
     if field in ('TGCLDLWP', 'TGCLDIWP'):
         if data.units == 'kg/m2':
-            data[:] = 1e3 * data[:]
+            attrs = data.attrs
+            data = 1e3 * data
+            data.attrs = attrs
             data.attrs['units'] = 'g/m2'
     elif field in ('cltcalipso', 'cltcalipso_liq', 'cltcalipso_ice',
                    'clcalipso',  'clcalipso_liq',  'clcalipso_ice'):
