@@ -149,6 +149,13 @@ def get_data(dataset, field):
         data = flux_up.isel(ilev=-1)
         data.attrs['long_name'] = 'Upward LW clearsky flux at surface'
         data.attrs['units'] = flux_up.attrs['units']
+    elif field == 'RESTOM':
+        net_sw_flux = get_data(dataset, 'FSNT')
+        net_lw_flux = get_data(dataset, 'FLNT')
+        data = net_sw_flux - net_lw_flux
+        data.attrs['long_name'] = 'Top of model net radiative flux'
+        data.attrs['units'] = net_sw_flux.attrs['units']
+        data.attrs['formula'] = 'FSNT - FLNT'
     elif field == 'CLDLIQICE':
         cldliq = get_data(dataset, 'CLDLIQ')
         cldice = get_data(dataset, 'CLDICE')
