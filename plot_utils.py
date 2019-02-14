@@ -105,7 +105,9 @@ def cartopy_circular(ax):
 
 
 
-def compare_maps_diff(lon, lat, data1, data2, labels=('case 1', 'case 2'), ncols=3, nrows=1, **kwargs):
+def compare_maps_diff(lon, lat, data1, data2, labels=('case 1', 'case 2'), 
+                      ncols=3, nrows=1, vmin=None, vmax=None, 
+                      cmap='viridis', cmap_diff='RdBu_r', **kwargs):
     
     from matplotlib import pyplot
     from cartopy import crs
@@ -117,15 +119,15 @@ def compare_maps_diff(lon, lat, data1, data2, labels=('case 1', 'case 2'), ncols
     )
     
     # Find data limits
-    vmin = min(data1.min().values, data2.min().values)
-    vmax = max(data1.max().values, data2.max().values)
+    if vmin is None: vmin = min(data1.min().values, data2.min().values)
+    if vmax is None: vmax = max(data1.max().values, data2.max().values)
     
     # Loop over cases and plot
     for icase, (data, case) in enumerate(zip((data1, data2), labels)):
         ax = figure.add_axes(axes[icase])
         pl = plot_map(
             lon, lat, data, vmin=vmin, vmax=vmax, 
-            transform=crs.PlateCarree(), 
+            transform=crs.PlateCarree(), cmap=cmap,
             **kwargs
         )
         
@@ -149,11 +151,14 @@ def compare_maps_diff(lon, lat, data1, data2, labels=('case 1', 'case 2'), ncols
             vmax = abs(data_diff).max().values
             vmin = -vmax
             
+            # Make sure cmap is not in kwargs
+            if 'cmap' in kwargs.keys(): kwargs.pop('cmap')
+            
             # plot
             ax = figure.add_axes(axes[-1])
             pl = plot_map(
                 lon, lat, data_diff, 
-                cmap='RdBu_r', vmin=vmin, vmax=vmax,
+                cmap=cmap_diff, vmin=vmin, vmax=vmax,
                 transform=crs.PlateCarree(),
                 **kwargs
             )
@@ -281,13 +286,12 @@ def compare_maps(data_arrays, labels=None,
     return figure
 
 
-def compare_maps_from_ds(datasets, field, plot_diffs=False, **kwargs):
+def compare_maps_from_ds(datasets, field, plot_diffs=False, vmin=None, vmax=None, cmap='viridis', **kwargs):
     
     # Get datarrays
     data_arrays = []
     for ds in datasets:
         da = get_data(ds, field)
-        print(field, da.attrs['units'])
     
         # If lat and lon are not packaged with data_arrays as coordinate variables,
         # then package them up as attributes
@@ -301,9 +305,10 @@ def compare_maps_from_ds(datasets, field, plot_diffs=False, **kwargs):
         
     # Now we can call our compare_maps function that operates on data_arrays        
     if plot_diffs:
-        return compare_maps_diff(data_arrays[0].lon, data_arrays[0].lat, *data_arrays, **kwargs)
+        return compare_maps_diff(data_arrays[0].lon, data_arrays[0].lat, *data_arrays, 
+                                 vmin=vmin, vmax=vmax, cmap=cmap, **kwargs)
     else:
-        return compare_maps(data_arrays, **kwargs)
+        return compare_maps(data_arrays, vmin=vmin, vmax=vmax, cmap=cmap, **kwargs)
     
 
     
