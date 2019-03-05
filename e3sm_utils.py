@@ -204,14 +204,14 @@ def get_data(dataset, field):
     return data
 
 
-def read_files(*files, year_offset=None):
+def read_files(*files, fix_time=False, year_offset=None):
     # read files without decoding timestamps, because control dates are
     # probably outside pandas valid range
     from xarray import open_mfdataset
     ds = open_mfdataset(*files, decode_times=False, autoclose=True)
 
     # fix time_bnds
-    if 'time_bnds' in ds.variables.keys():
+    if fix_time and 'time_bnds' in ds.variables.keys():
         ds['time_bnds'].attrs['units'] = ds['time'].attrs['units']
 
         # for monthly averages, the time is defined as the *end* of the
@@ -220,13 +220,13 @@ def read_files(*files, year_offset=None):
         # because if we want to select all the January means to then do 
         # something like calculate a climatology, we would need to offset these
         # time values to get the month that the averaging is actually over.
-        # As a work-around, we can refine the time coordinate values to be the
+        # As a work-around, we can redefine the time coordinate values to be the
         # average of the time_bnds variable.
         #ds['time_bnds'].attrs['units'] = ds['time'].attrs['units']
         bnd_dim = list(set(ds['time_bnds'].dims) - set(('time',)))
-        #attrs = ds['time'].attrs
+        attrs = ds['time'].attrs
         ds['time'] = ds['time_bnds'].astype('int64').mean(bnd_dim).astype('datetime64[ns]')
-        #ds['time'].attrs = attrs
+        ds['time'].attrs = attrs
         
     # manually decode the times
     from xarray import decode_cf
@@ -236,7 +236,7 @@ def read_files(*files, year_offset=None):
         # simulations that set the initial year as 0001.
         # as a hackish solution, we can just adjust the units of the time
         # axis...first, find the current base year
-        time_units = ds['time'].units 
+        time_units = ds['time'].attrs['units'] 
         base_year_idx = time_units.index('since ') + 6
         year = int(time_units[base_year_idx:base_year_idx+4])
 
