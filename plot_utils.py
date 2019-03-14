@@ -146,6 +146,7 @@ def compare_maps_diff(lon, lat, data1, data2, labels=('case 1', 'case 2'),
             # calculate differences
             data_diff = data - data_cntl
             data_diff.attrs = data.attrs
+
             
             # get data limits
             vmax = abs(data_diff).max().values
@@ -214,7 +215,8 @@ def plot_map(lon, lat, data, lon_corners=None, lat_corners=None, **kwargs):
 
     # Fix longitudes
     import numpy
-    new_lon = numpy.where(lon > 180, lon - 360, lon)
+    from xarray import DataArray
+    new_lon = DataArray(numpy.where(lon > 180, lon - 360, lon), dims=('ncol'))
     
     # Setup plot axes
     ax = pyplot.gca()
@@ -225,6 +227,12 @@ def plot_map(lon, lat, data, lon_corners=None, lat_corners=None, **kwargs):
     if all([v is not None for v in (lon_corners, lat_corners)]):
         pl = plot_map_native(lon_corners, lat_corners, data, **kwargs)
     elif 'ncol' in data.dims:
+        # Drop missing data
+        new_lon = new_lon.where(data.squeeze().notnull()).dropna('ncol')
+        lat = lat.where(data.squeeze().notnull()).dropna('ncol')
+        data = data.squeeze().dropna('ncol')
+
+        # Plot
         pl = ax.tripcolor(new_lon.squeeze(), lat.squeeze(), data.squeeze(), **kwargs)
     else:
         pl = ax.pcolormesh(new_lon.squeeze(), lat.squeeze(), data.squeeze().transpose('lat', 'lon'), **kwargs)
