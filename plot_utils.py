@@ -225,9 +225,9 @@ def plot_map(lon, lat, data, lon_corners=None, lat_corners=None, **kwargs):
     if all([v is not None for v in (lon_corners, lat_corners)]):
         pl = plot_map_native(lon_corners, lat_corners, data, **kwargs)
     elif 'ncol' in data.dims:
-        pl = ax.tripcolor(new_lon.squeeze(), lat.squeeze(), data.squeeze(), **kwargs)
+        pl = ax.tripcolor(new_lon.squeeze(), lat.squeeze(), numpy.ma.masked_invalid(data.squeeze()), **kwargs)
     else:
-        pl = ax.pcolormesh(new_lon.squeeze(), lat.squeeze(), data.squeeze().transpose('lat', 'lon'), **kwargs)
+        pl = ax.pcolormesh(new_lon.squeeze(), lat.squeeze(), numpy.ma.masked_invalid(data.squeeze().transpose('lat', 'lon')), **kwargs)
     
     # Return plot handle
     return pl
