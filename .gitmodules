@@ -1,0 +1,3 @@
+[submodule "cmclimate"]
+	path = cmclimate
+	url = https://github.com/serazing/cmclimate.git

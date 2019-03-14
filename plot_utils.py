@@ -235,7 +235,7 @@ def plot_map(lon, lat, data, lon_corners=None, lat_corners=None, **kwargs):
         # Plot
         pl = ax.tripcolor(new_lon.squeeze(), lat.squeeze(), data.squeeze(), **kwargs)
     else:
-        pl = ax.pcolormesh(new_lon.squeeze(), lat.squeeze(), data.squeeze().transpose('lat', 'lon'), **kwargs)
+        pl = ax.pcolormesh(new_lon.squeeze(), lat.squeeze(), numpy.ma.masked_invalid(data.squeeze().transpose('lat', 'lon')), **kwargs)
     
     # Return plot handle
     return pl
