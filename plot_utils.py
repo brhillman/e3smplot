@@ -4,6 +4,60 @@ from cartopy import crs
 
 from .e3sm_utils import get_data
 
+def plot_unstructured(xv, yv, data, **kwargs):
+    """
+    xv and yv should have shape [nj,ni,nv], where nv is the number
+    of vertices, and nj and ni are indices to coordinates. If unstructured,
+    nj or ni is probably 1, but if a lat-lon grid nj and ni are probably
+    both > 0. Data should have dimensions nj and ni.
+    
+    TODO: it would be better to generalize this by collapsing nj and ni.
+    """
+
+    from matplotlib import pyplot
+    from matplotlib.path import Path
+    from matplotlib.patches import PathPatch
+    from matplotlib.collections import PatchCollection
+    from cartopy import crs
+    import numpy
+
+    patches = []
+    for i in range(xv.shape[1]):
+        for j in range(xv.shape[0]):
+
+            # Find vertices for this cell
+            corners = []
+            xvals = xv.values[j,i,:]
+            yvals = yv.values[j,i,:]
+
+            # Fix stuff that wraps around; I should NOT have to do this
+            # if I'm using cartopy!
+            if any(xvals < 90) and any(xvals > 270):
+                xvals = numpy.where(xvals < 90, xvals + 360, xvals)
+            if any(yvals < -45) and any(yvals > 45):
+                yvals = numpy.where(yvals < -45, yvals + 90, yvals)
+            for iv in range(ds.dims['nv']):
+                corners.append([xvals[iv], yvals[iv]])
+
+            # Add PathPatch for this cell
+            path = Path(corners, closed=False)
+            patch = PathPatch(path, edgecolor='black', facecolor='none')
+            patches.append(patch)
+
+    # Create a PatchCollection from our aggregated list of PathPatches
+    p = PatchCollection(patches, facecolor='white', edgecolor='none', **kwargs)
+    
+    # Color the patches in the collection according to the data values
+    colors = data.squeeze()
+    p.set_array(numpy.array(colors))
+
+    # Add the collection to the axes
+    ax.add_collection(p)
+    
+    # Return collection of patches
+    return p
+
+
 def plot_field(dataset, field, plot_type='map', **kwargs):
 
     # Get data
@@ -459,7 +513,7 @@ def calculate_zonal_mean(data, weights, old_lat, lat_edges=None):
     return data_zonal, lat_centers
 
 
-def compare_zonal_means(datasets, field, labels=None, **kwargs):
+def compare_zonal_means(datasets, field, labels=None, plot_diffs=False, **kwargs):
 
     figure = pyplot.figure()
     ax = figure.add_subplot(111)
@@ -490,11 +544,31 @@ def compare_zonal_means(datasets, field, labels=None, **kwargs):
                 raise NameError('No valid label.')
 
         pl = ax.plot(lat_centers, data_zonal, label=label, **kwargs)
+
+        if plot_diffs:
+            if icase == 0:
+                data_cntl = data_zonal.copy(deep=True)
+            else:
+                ax_diff = ax.twinx()
+                data_diff = data_zonal - data_cntl
+                data_diff.attrs = data_zonal.attrs
+                pl = ax_diff.plot(
+                    lat_centers, data_diff, label='Difference',
+                    color='0.5', alpha=0.5, **kwargs
+                )
+                ax_diff.set_ylabel('Difference')
+
+                ax_diff.plot(ax_diff.get_xlim(), [0, 0], color='0.5', alpha=0.5,
+                        linestyle='dashed')
+
+                diff_max = abs(data_diff).max()
+                ax_diff.set_ylim([-2 * diff_max, 2 * diff_max])
+                       
         
     # Label using last used data
     ax.set_xlabel('Latitude')
     ax.set_ylabel('%s (%s)'%(data.long_name, data.units))
-    ax.legend()
+    ax.legend(loc='best')
     
     return figure
 
