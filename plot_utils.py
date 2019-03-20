@@ -10,6 +10,9 @@ def plot_unstructured(xv, yv, data, **kwargs):
     of vertices, and nj and ni are indices to coordinates. If unstructured,
     nj or ni is probably 1, but if a lat-lon grid nj and ni are probably
     both > 0. Data should have dimensions nj and ni.
+
+    NOTE: To avoid artifacts due to antialiasing, you should probably pass
+    antialiaseds=False to **kwargs. Should this be the default?
     
     TODO: it would be better to generalize this by collapsing nj and ni.
     """
@@ -21,6 +24,7 @@ def plot_unstructured(xv, yv, data, **kwargs):
     from cartopy import crs
     import numpy
 
+    ax = pyplot.gca()
     patches = []
     for i in range(xv.shape[1]):
         for j in range(xv.shape[0]):
@@ -36,7 +40,7 @@ def plot_unstructured(xv, yv, data, **kwargs):
                 xvals = numpy.where(xvals < 90, xvals + 360, xvals)
             if any(yvals < -45) and any(yvals > 45):
                 yvals = numpy.where(yvals < -45, yvals + 90, yvals)
-            for iv in range(ds.dims['nv']):
+            for iv in range(xv.shape[-1]):
                 corners.append([xvals[iv], yvals[iv]])
 
             # Add PathPatch for this cell
@@ -53,6 +57,10 @@ def plot_unstructured(xv, yv, data, **kwargs):
 
     # Add the collection to the axes
     ax.add_collection(p)
+
+    # Set sane axes limits
+    ax.set_xlim([xv.min(), xv.max()])
+    ax.set_ylim([yv.min(), yv.max()])
     
     # Return collection of patches
     return p
