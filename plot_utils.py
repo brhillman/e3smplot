@@ -26,6 +26,7 @@ def plot_unstructured(xv, yv, data, **kwargs):
 
     ax = pyplot.gca()
     patches = []
+    colors = []
     for i in range(xv.shape[1]):
         for j in range(xv.shape[0]):
 
@@ -47,13 +48,16 @@ def plot_unstructured(xv, yv, data, **kwargs):
             path = Path(corners, closed=False)
             patch = PathPatch(path, edgecolor='black', facecolor='none')
             patches.append(patch)
+            
+            # Get data values for this point so we can color later
+            colors.append(data[j,i])
 
     # Create a PatchCollection from our aggregated list of PathPatches
-    p = PatchCollection(patches, facecolor='white', edgecolor='none', **kwargs)
+    p = PatchCollection(patches, facecolor='white', **kwargs)
     
     # Color the patches in the collection according to the data values
-    colors = data.squeeze()
-    p.set_array(numpy.array(colors))
+    #colors = data.squeeze()
+    p.set_array(colors) #numpy.array(colors))
 
     # Add the collection to the axes
     ax.add_collection(p)
@@ -273,12 +277,13 @@ def plot_map_native(lon_corners, lat_corners, data, **kwargs):
     return pl
 
 
-def plot_map(lon, lat, data, lon_corners=None, lat_corners=None, **kwargs):
+def plot_map(lon, lat, data, lon_corners=None, lat_corners=None, method='pcolor', **kwargs):
 
     # Fix longitudes
     import numpy
     from xarray import DataArray
-    new_lon = DataArray(numpy.where(lon > 180, lon - 360, lon), dims=('ncol'))
+    new_lon = lon.copy(deep=True)
+    new_lon.values = numpy.where(lon > 180, lon - 360, lon)
     
     # Setup plot axes
     ax = pyplot.gca()
@@ -295,16 +300,26 @@ def plot_map(lon, lat, data, lon_corners=None, lat_corners=None, **kwargs):
         data = data.squeeze().dropna('ncol')
 
         # Plot
-        pl = ax.tripcolor(new_lon.squeeze(), lat.squeeze(), data.squeeze(), **kwargs)
+        if method is 'pcolor':
+            pl = ax.tripcolor(new_lon.squeeze(), lat.squeeze(), data.squeeze(), **kwargs)
+        elif method is 'contourf':
+            pl = ax.tricontourf(new_lon.squeeze(), lat.squeeze(), data.squeeze(), **kwargs)
+        else:
+            raise ValueError('%s not a valid plot method'%(method))
     else:
-        pl = ax.pcolormesh(new_lon.squeeze(), lat.squeeze(), numpy.ma.masked_invalid(data.squeeze().transpose('lat', 'lon')), **kwargs)
+        if method is 'pcolor':
+            pl = ax.pcolormesh(new_lon.squeeze(), lat.squeeze(), numpy.ma.masked_invalid(data.squeeze().transpose('lat', 'lon')), **kwargs)
+        elif method is 'contourf':
+            pl = ax.contourf(new_lon.squeeze(), lat.squeeze(), numpy.ma.masked_invalid(data.squeeze().transpose('lat', 'lon')), **kwargs)
+        else:
+            raise ValueError('%s not a valid plot method'%(method))
     
     # Return plot handle
     return pl
 
 
 def compare_maps(data_arrays, labels=None, 
-                 ncols=None, nrows=None,
+                 figsize=None, ncols=None, nrows=None,
                  lat_bounds=None,
                  projection=crs.PlateCarree(), 
                  vmin=None, vmax=None, label_minmax=False, **kwargs):
@@ -319,8 +334,10 @@ def compare_maps(data_arrays, labels=None,
     if vmin is None: vmin = min([data.min().values for data in data_arrays])
     if vmax is None: vmax = max([data.max().values for data in data_arrays])
     
+    if figsize is None: figsize=(15,5)
+
     # Open figure
-    figure, axes = pyplot.subplots(nrows, ncols, subplot_kw=dict(projection=projection), figsize=(15,5))
+    figure, axes = pyplot.subplots(nrows, ncols, subplot_kw=dict(projection=projection), figsize=figsize)
     
     # Loop and plot
     for icase, data in enumerate(data_arrays):
@@ -338,6 +355,7 @@ def compare_maps(data_arrays, labels=None,
                       vmin=vmin, vmax=vmax, **kwargs)
         
         # Label plot
+        label = ""
         if labels is None:
             if 'case' in data.attrs: label = data.case
         else:
@@ -356,7 +374,7 @@ def compare_maps(data_arrays, labels=None,
     return figure
 
 
-def compare_maps_from_ds(datasets, field, plot_diffs=False, vmin=None, vmax=None, cmap='viridis', **kwargs):
+def compare_maps_from_ds(datasets, field, labels=None, figsize=None, plot_diffs=False, vmin=None, vmax=None, cmap='viridis', **kwargs):
     
     # Get datarrays
     data_arrays = []
@@ -378,12 +396,12 @@ def compare_maps_from_ds(datasets, field, plot_diffs=False, vmin=None, vmax=None
         return compare_maps_diff(data_arrays[0].lon, data_arrays[0].lat, *data_arrays, 
                                  vmin=vmin, vmax=vmax, cmap=cmap, **kwargs)
     else:
-        return compare_maps(data_arrays, vmin=vmin, vmax=vmax, cmap=cmap, **kwargs)
+        return compare_maps(data_arrays, labels=labels, figsize=figsize, vmin=vmin, vmax=vmax, cmap=cmap, **kwargs)
     
 
     
 def compare_maps_from_datasets(datasets, field, labels=None, projection=crs.PlateCarree(), 
-                               ncols=None, nrows=None, vmin=None, vmax=None,
+                               ncols=None, nrows=None, figsize=None, vmin=None, vmax=None,
                                lat_bounds=None, lon_bounds=None, plot_differences=False,
                                **kwargs):
     
@@ -397,7 +415,7 @@ def compare_maps_from_datasets(datasets, field, labels=None, projection=crs.Plat
     if vmax is None: vmax = max([data.max().values for data in data_arrays])
     
     # Open figure
-    figure, axes = pyplot.subplots(nrows, ncols, subplot_kw=dict(projection=projection))
+    figure, axes = pyplot.subplots(nrows, ncols, figsize=figsize, subplot_kw=dict(projection=projection))
     
     # Loop and plot
     for icase, dataset in enumerate(datasets):
