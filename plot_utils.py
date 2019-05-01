@@ -4,7 +4,80 @@ from cartopy import crs
 
 from .e3sm_utils import get_data
 
-def plot_unstructured(xv, yv, data, **kwargs):
+from matplotlib import pyplot
+from matplotlib.path import Path
+from matplotlib.patches import PathPatch
+from matplotlib.collections import PatchCollection
+from cartopy import crs
+import numpy
+
+def plot_unstructured(xv, yv, data, antialiased=False, **kwargs):
+    """
+    Plot unstructured data. xv and yv specify the x and y coordinates
+    of the vertices of each cell and should have shape [ni,nv] where ni
+    is the size of the grid (number of cells) and nv is the number of
+    vertices for each cell. Data contains the values of the data you
+    want to plot, and should have dimension [ni,]. The intent with this
+    function is that you will need to read in an auxillary SCRIP-format
+    file that describes the grid (unless this information is present in
+    the same file that contains the data; unlikely) as well as the file
+    that contains the data, and grab the cell corner information from
+    the SCRIP file and the data from the data file. This function will
+    then plot the data on the native grid by looping over each cell and
+    drawing patches for each. Note that this will probably be really
+    slow for big grids! Seems to work alright up to about ne120 or so,
+    but really some more clever techniques should probably be used here
+    (parallelism?).
+    
+    NOTE: To avoid artifacts due to antialiasing, you should probably pass
+    antialiaseds=False to **kwargs.
+    """
+    patches = []
+    colors = []
+    for i in range(xv.shape[0]):
+
+        # Find vertices for this cell (as [x, y] pairs)
+        corners = []
+        xvals = xv.values[i,:]
+        yvals = yv.values[i,:]
+
+        # Fix stuff that wraps around; I should NOT have to do this
+        # if I'm using cartopy!
+        if any(xvals < 90) and any(xvals > 270):
+            xvals = numpy.where(xvals < 90, xvals + 360, xvals)
+        if any(yvals < -45) and any(yvals > 45):
+            yvals = numpy.where(yvals < -45, yvals + 90, yvals)
+        
+        # Loop over corners
+        for iv in range(xv.shape[1]):
+            corners.append([xvals[iv], yvals[iv]])
+
+        # Add PathPatch for this cell
+        path = Path(corners, closed=False)
+        patch = PathPatch(path)
+        patches.append(patch)
+        colors.append(data.values[i])
+        
+    # Create a PatchCollection from our aggregated list of PathPatches
+    p = PatchCollection(patches, antialiaseds=antialiased, **kwargs)
+    
+    # Color the patches in the collection according to the data values
+    #colors = data.squeeze()
+    p.set_array(numpy.array(colors))
+
+    # Add the collection to the axes
+    ax = pyplot.gca()
+    ax.add_collection(p)
+
+    # Set sane axes limits
+    ax.set_xlim([xv.min(), xv.max()])
+    ax.set_ylim([yv.min(), yv.max()])
+    
+    # Return collection of patches
+    return p
+
+
+def plot_mapping_data(xv, yv, data, **kwargs):
     """
     xv and yv should have shape [nj,ni,nv], where nv is the number
     of vertices, and nj and ni are indices to coordinates. If unstructured,
@@ -239,6 +312,12 @@ def compare_maps_diff(lon, lat, data1, data2, labels=('case 1', 'case 2'),
     
     # Return figure object
     return figure
+
+
+def fix_longitudes(lon):
+    import numpy
+    lon.values = numpy.where(lon > 180, lon - 360, lon)
+    return lon
 
 
 def plot_map_native(lon_corners, lat_corners, data, **kwargs):
