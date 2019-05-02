@@ -77,6 +77,43 @@ def plot_unstructured(xv, yv, data, antialiased=False, **kwargs):
     return p
 
 
+def plot_map_native(lon_corners, lat_corners, data, **kwargs):
+    from matplotlib import pyplot, patches, path    
+    import numpy
+    
+    # Fix longitude coordinates; we need longitudes to run from
+    # -180 to 180, not from 0 to 360
+    lon_corners.values = numpy.where(lon_corners > 180, lon_corners - 360, lon_corners)
+
+    # Loop over GLL nodes and create paths that describe the boundaries
+    # of each node; collect these into a list to plot all at once
+    path_list = []
+    for icol in range(lon_corners.shape[0]):
+       
+        # Get corners for this node
+        x_corners = lon_corners[icol,:].values
+        y_corners = lat_corners[icol,:].values
+        
+        # Repeat first vertex at end of array to close the path
+        x_corners = numpy.append(x_corners, x_corners[0])
+        y_corners = numpy.append(y_corners, y_corners[0])
+            
+        # Create paths connecting the corners and append to list
+        vertices = numpy.column_stack([x_corners, y_corners])
+        path_list.append(path.Path(vertices, closed=True))
+        
+    # Plot collection of patches
+    from matplotlib.collections import PathCollection
+    collection = PathCollection(path_list, transform=crs.Geodetic(), **kwargs)
+    collection.set_array(data)
+    
+    ax = pyplot.gca()
+    pl = ax.add_collection(collection)
+    
+    return pl
+
+
+
 def plot_mapping_data(xv, yv, data, **kwargs):
     """
     xv and yv should have shape [nj,ni,nv], where nv is the number
@@ -320,40 +357,29 @@ def fix_longitudes(lon):
     return lon
 
 
-def plot_map_native(lon_corners, lat_corners, data, **kwargs):
-    from matplotlib import pyplot, patches, path    
+def regrid_data(lon, lat, data, nlon=360, nlat=180):
+    
+    # Define new coordinates
     import numpy
+    new_lon = numpy.linspace(0, 360, nlon)
+    new_lat = numpy.linspace(-90, 90, nlat)
     
-    # Fix longitude coordinates; we need longitudes to run from
-    # -180 to 180, not from 0 to 360
-    lon_corners.values = numpy.where(lon_corners > 180, lon_corners - 360, lon_corners)
-
-    # Loop over GLL nodes and create paths that describe the boundaries
-    # of each node; collect these into a list to plot all at once
-    path_list = []
-    for icol in range(lon_corners.shape[0]):
-       
-        # Get corners for this node
-        x_corners = lon_corners[icol,:].values
-        y_corners = lat_corners[icol,:].values
-        
-        # Repeat first vertex at end of array to close the path
-        x_corners = numpy.append(x_corners, x_corners[0])
-        y_corners = numpy.append(y_corners, y_corners[0])
-            
-        # Create paths connecting the corners and append to list
-        vertices = numpy.column_stack([x_corners, y_corners])
-        path_list.append(path.Path(vertices, closed=True))
-        
-    # Plot collection of patches
-    from matplotlib.collections import PathCollection
-    collection = PathCollection(path_list, transform=crs.Geodetic(), **kwargs)
-    collection.set_array(data)
+    # Interpolate to new grid
+    from scipy.interpolate import griddata
+    new_data = griddata((lon, lat), data, (new_lon[None,:], new_lat[:,None]), method='linear')
     
-    ax = pyplot.gca()
-    pl = ax.add_collection(collection)
+    # Turn these into DataArrays
+    from xarray import DataArray
+    new_lon = DataArray(new_lon, dims=('lon',), attrs={'long_name': 'longitude'})
+    new_lat = DataArray(new_lat, dims=('lat',), attrs={'long_name': 'latitude'})
+    new_data = DataArray(
+        new_data, dims=('lat', 'lon'), 
+        coords={'lon': new_lon, 'lat': new_lat},
+        attrs=data.attrs,
+    )
     
-    return pl
+    # Return DataArrays
+    return new_lon, new_lat, new_data
 
 
 def plot_map(lon, lat, data, lon_corners=None, lat_corners=None, method='pcolor', **kwargs):

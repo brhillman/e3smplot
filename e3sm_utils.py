@@ -162,6 +162,12 @@ def get_data(dataset, field):
         data = cldliq + cldice
         data.attrs = cldliq.attrs
         data.attrs['long_name'] = 'Combined liq+ice condensate'
+    elif field == 'PRECT':
+        precc = get_data(dataset, 'PRECC')
+        precl = get_data(dataset, 'PRECL')
+        data = precc + precl
+        data.attrs = precc.attrs
+        data.attrs['long_name'] = 'Total precipitation rate'
         
     # CALIPSO-simulated or CALIPSO-retrieved fields
     elif field == 'cltcalipso':
@@ -194,7 +200,7 @@ def get_data(dataset, field):
             data = 100 * data
             data.attrs = attrs
             data.attrs['units'] = '%'
-    elif field in ('PRECC', 'PRECL'):
+    elif field in ('PRECC', 'PRECL', 'PRECT'):
         if data.attrs['units'].lower() == 'm/s':
             attrs = data.attrs
             data = 60 * 60 * 24 * 1e3 * data
@@ -204,11 +210,11 @@ def get_data(dataset, field):
     return data
 
 
-def read_files(*files, fix_time=False, year_offset=None):
+def read_files(*files, fix_time=False, year_offset=None, **kwargs):
     # read files without decoding timestamps, because control dates are
     # probably outside pandas valid range
     from xarray import open_mfdataset
-    ds = open_mfdataset(*files, decode_times=False, autoclose=True)
+    ds = open_mfdataset(*files, decode_times=False, autoclose=True, **kwargs)
 
     # fix time_bnds
     if fix_time and 'time_bnds' in ds.variables.keys():
