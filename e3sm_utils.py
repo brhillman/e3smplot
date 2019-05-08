@@ -168,6 +168,12 @@ def get_data(dataset, field):
         data = precc + precl
         data.attrs = precc.attrs
         data.attrs['long_name'] = 'Total precipitation rate'
+    elif field == 'TGCLDWP':
+        clwp = get_data(dataset, 'TGCLDLWP')
+        ciwp = get_data(dataset, 'TGCLDIWP')
+        data = clwp + ciwp
+        data.attrs = clwp.attrs
+        data.attrs['long_name'] = 'Total gridbox cloud water path'
         
     # CALIPSO-simulated or CALIPSO-retrieved fields
     elif field == 'cltcalipso':
@@ -187,7 +193,7 @@ def get_data(dataset, field):
         raise NameError('%s not found in dataset.'%field)
     
     # Adjust units if necessary
-    if field in ('TGCLDLWP', 'TGCLDIWP'):
+    if field in ('TGCLDLWP', 'TGCLDIWP', 'TGCLDWP'):
         if data.units == 'kg/m2':
             attrs = data.attrs
             data = 1e3 * data
