@@ -6,12 +6,13 @@ def plot_exodus(ds, ax=None, **plot_kwargs):
     from cartopy import crs, feature
 
     # set up the axes and map
-    if ax is None: ax = pyplot.subplot(projection=crs.PlateCarree())
-    ax.set_global()
+    if ax is None: 
+        ax = pyplot.subplot(projection=crs.PlateCarree())
+        ax.set_global()
 
-    # add ocean and land fills
-    ax.add_feature(feature.OCEAN, zorder=0)
-    ax.add_feature(feature.LAND, zorder=0)
+        # add ocean and land fills
+        ax.add_feature(feature.OCEAN, zorder=0)
+        ax.add_feature(feature.LAND, zorder=0)
 
     # cartesian coordinates (radians?)
     x = ds['coord'][0,:].squeeze()
@@ -29,6 +30,9 @@ def plot_exodus(ds, ax=None, **plot_kwargs):
     # corner indices
     corner_indices = ds['connect1']
 
+    if 'color' not in plot_kwargs.keys():
+        plot_kwargs['color'] = 'black'
+        
     for i in range(corner_indices.shape[0]):
         # get element corners
         lon_corners = lon[corner_indices[i,:] - 1]
@@ -43,7 +47,7 @@ def plot_exodus(ds, ax=None, **plot_kwargs):
         for j in range(len(xx)-1):
             pl = ax.plot(
                 [xx[j], xx[j+1]], [yy[j], yy[j+1]], 
-                transform=crs.Geodetic(), color='black', **plot_kwargs
+                transform=crs.Geodetic(), **plot_kwargs
             )
 
     return pl, ax
