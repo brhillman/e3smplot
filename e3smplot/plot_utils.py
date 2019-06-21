@@ -282,7 +282,7 @@ def cartopy_circular(ax):
 
 
 def compare_maps_diff(lon, lat, data1, data2, labels=('case 1', 'case 2'), 
-                      ncols=3, nrows=1, vmin=None, vmax=None, 
+                      ncols=3, nrows=1,  
                       cmap='viridis', cmap_diff='RdBu_r', **kwargs):
     
     from matplotlib import pyplot
@@ -295,14 +295,14 @@ def compare_maps_diff(lon, lat, data1, data2, labels=('case 1', 'case 2'),
     )
     
     # Find data limits
-    if vmin is None: vmin = min(data1.min().values, data2.min().values)
-    if vmax is None: vmax = max(data1.max().values, data2.max().values)
+    if 'vmin' not in kwargs.keys(): kwargs['vmin'] = min(data1.min().values, data2.min().values)
+    if 'vmax' not in kwargs.keys(): kwargs['vmax'] = max(data1.max().values, data2.max().values)
     
     # Loop over cases and plot
     for icase, (data, case) in enumerate(zip((data1, data2), labels)):
         ax = figure.add_axes(axes[icase])
         pl = plot_map(
-            lon, lat, data, vmin=vmin, vmax=vmax, 
+            lon, lat, data,
             transform=crs.PlateCarree(), cmap=cmap,
             **kwargs
         )
@@ -325,19 +325,17 @@ def compare_maps_diff(lon, lat, data1, data2, labels=('case 1', 'case 2'),
 
             
             # get data limits
-            vmax = abs(data_diff).max().values
-            vmin = -vmax
-            
-            # Make sure cmap is not in kwargs
-            if 'cmap' in kwargs.keys(): kwargs.pop('cmap')
+            kwargs_diff = kwargs.copy()
+            kwargs_diff['vmax'] = abs(data_diff).max().values
+            kwargs_diff['vmin'] = -kwargs_diff['vmax']
+            kwargs_diff['cmap'] = cmap_diff
             
             # plot
             ax = figure.add_axes(axes[-1])
             pl = plot_map(
                 lon, lat, data_diff, 
-                cmap=cmap_diff, vmin=vmin, vmax=vmax,
                 transform=crs.PlateCarree(),
-                **kwargs
+                **kwargs_diff
             )
             ax.set_title('Difference (min = %.3f, max = %.3f)'%(
                 data_diff.min().values, data_diff.max().values
@@ -479,7 +477,7 @@ def compare_maps(data_arrays, labels=None,
     return figure
 
 
-def compare_maps_from_ds(datasets, field, labels=None, figsize=None, plot_diffs=False, vmin=None, vmax=None, cmap='viridis', **kwargs):
+def compare_maps_from_ds(datasets, field, labels=None, figsize=None, plot_diffs=False, **kwargs):
     
     # Get datarrays
     data_arrays = []
@@ -499,9 +497,9 @@ def compare_maps_from_ds(datasets, field, labels=None, figsize=None, plot_diffs=
     # Now we can call our compare_maps function that operates on data_arrays        
     if plot_diffs:
         return compare_maps_diff(data_arrays[0].lon, data_arrays[0].lat, *data_arrays, 
-                                 vmin=vmin, vmax=vmax, cmap=cmap, **kwargs)
+                                 labels=labels, **kwargs)
     else:
-        return compare_maps(data_arrays, labels=labels, figsize=figsize, vmin=vmin, vmax=vmax, cmap=cmap, **kwargs)
+        return compare_maps(data_arrays, labels=labels, figsize=figsize, **kwargs)
     
 
     
@@ -707,7 +705,8 @@ def compare_zonal_means(datasets, field, labels=None, plot_diffs=False, **kwargs
 def compare_zonal_profiles(datasets, field, labels=None, 
                            nrows=None, ncols=None, 
                            common_colorbar=False,
-                           plot_diffs=True, **kwargs):
+                           plot_diffs=True, vmin_diff=None, vmax_diff=None, 
+                           **kwargs):
         
     if nrows is None: 
         if plot_diffs is True:
@@ -732,8 +731,8 @@ def compare_zonal_profiles(datasets, field, labels=None,
         latitudes.append(lat_zonal)
 
     # Find min and max over all data arrays
-    vmin = min([data.min().values for data in data_arrays])
-    vmax = max([data.max().values for data in data_arrays])
+    if 'vmin' not in kwargs.keys(): kwargs['vmin'] = min([data.min().values for data in data_arrays])
+    if 'vmax' not in kwargs.keys(): kwargs['vmax'] = max([data.max().values for data in data_arrays])
     
     # Loop and plot
     for icase, (data, lat) in enumerate(zip(data_arrays, latitudes)):
@@ -742,7 +741,7 @@ def compare_zonal_profiles(datasets, field, labels=None,
         ax = figure.add_axes(axes.ravel()[icase])
         pl = ax.pcolormesh(
             lat, data.lev, data.transpose(data.lev.name, data.lat.name),
-            vmin=vmin, vmax=vmax, **kwargs
+            **kwargs
         )
         cb = pyplot.colorbar(
             pl, ax=ax, orientation='horizontal',
@@ -770,14 +769,14 @@ def compare_zonal_profiles(datasets, field, labels=None,
                 data_diff.attrs = data.attrs
 
                 # Find min and max
-                vmax = abs(data_diff).max().values
-                vmin = -vmax
+                if vmax_diff is None: vmax_diff = abs(data_diff).max().values
+                if vmin_diff is None: vmin_diff = -vmax
 
                 # Plot diff
                 ax = figure.add_axes(axes.ravel()[-1])
                 pl = ax.pcolormesh(
                     lat, data_diff.lev, data_diff.transpose(data_diff.lev.name, data_diff.lat.name),
-                    vmin=vmin, vmax=vmax, cmap='RdBu_r'
+                    vmin=vmin_diff, vmax=vmax_diff, cmap='RdBu_r'
                 )
                 cb = pyplot.colorbar(
                     pl, ax=ax, orientation='horizontal',
