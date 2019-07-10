@@ -2,7 +2,7 @@
 from matplotlib import pyplot
 from cartopy import crs
 
-from .e3sm_utils import get_data
+from .e3sm_utils import get_data, area_average
 
 from matplotlib import pyplot
 from matplotlib.path import Path
@@ -706,6 +706,8 @@ def compare_zonal_profiles(datasets, field, labels=None,
                            nrows=None, ncols=None, 
                            common_colorbar=False,
                            plot_diffs=True, vmin_diff=None, vmax_diff=None, 
+                           range_percentile=None,
+                           colorbar_orientation='horizontal',
                            **kwargs):
         
     if nrows is None: 
@@ -731,8 +733,12 @@ def compare_zonal_profiles(datasets, field, labels=None,
         latitudes.append(lat_zonal)
 
     # Find min and max over all data arrays
-    if 'vmin' not in kwargs.keys(): kwargs['vmin'] = min([data.min().values for data in data_arrays])
-    if 'vmax' not in kwargs.keys(): kwargs['vmax'] = max([data.max().values for data in data_arrays])
+    if range_percentile is not None:
+        if 'vmin' not in kwargs.keys(): kwargs['vmin'] = min([numpy.nanpercentile(data, range_percentile) for data in data_arrays])
+        if 'vmax' not in kwargs.keys(): kwargs['vmax'] = max([numpy.nanpercentile(data, 100 - range_percentile) for data in data_arrays])
+    else:
+        if 'vmin' not in kwargs.keys(): kwargs['vmin'] = min([data.min().values for data in data_arrays])
+        if 'vmax' not in kwargs.keys(): kwargs['vmax'] = max([data.max().values for data in data_arrays])
     
     # Loop and plot
     for icase, (data, lat) in enumerate(zip(data_arrays, latitudes)):
@@ -744,7 +750,7 @@ def compare_zonal_profiles(datasets, field, labels=None,
             **kwargs
         )
         cb = pyplot.colorbar(
-            pl, ax=ax, orientation='horizontal',
+            pl, ax=ax, orientation=colorbar_orientation,
             label='%s (%s)'%(data.long_name, data.units),
             pad=0.2,
         )
@@ -770,7 +776,7 @@ def compare_zonal_profiles(datasets, field, labels=None,
 
                 # Find min and max
                 if vmax_diff is None: vmax_diff = abs(data_diff).max().values
-                if vmin_diff is None: vmin_diff = -vmax
+                if vmin_diff is None: vmin_diff = -vmax_diff
 
                 # Plot diff
                 ax = figure.add_axes(axes.ravel()[-1])
@@ -779,7 +785,7 @@ def compare_zonal_profiles(datasets, field, labels=None,
                     vmin=vmin_diff, vmax=vmax_diff, cmap='RdBu_r'
                 )
                 cb = pyplot.colorbar(
-                    pl, ax=ax, orientation='horizontal',
+                    pl, ax=ax, orientation=colorbar_orientation,
                     label='%s (%s)'%(data_diff.long_name, data_diff.units),
                     pad=0.2,
                 )
@@ -851,6 +857,65 @@ def compare_zonal_profiles_da(data_arrays, labels=None, nrows=None, ncols=None, 
         shrink=0.8
     )
     ax.set_ylim(ax.get_ylim()[::-1])
+    
+    return figure
+
+
+def compare_global_profiles(datasets, field, labels=None, plot_diffs=False, **kwargs):
+
+    figure = pyplot.figure()
+    ax = figure.add_subplot(111)
+
+    for icase, dataset in enumerate(datasets):
+
+        # Get data
+        data = get_data(dataset, field)
+        area = get_data(dataset, 'area')
+        
+        # Get area weights for averaging
+        from xarray import broadcast
+        weights, *__ = broadcast(area, data)
+
+        # Calculate global means
+        data_global = area_average(data, weights, dims=('ncol',))
+        
+        # Make plot
+        if labels is not None: 
+            label = labels[icase]
+        else:
+            if 'casename' in dataset.attrs.keys():
+                label = dataset.attrs['casename']
+            elif 'case' in dataset.attrs.keys():
+                label = dataset.attrs['case']
+            else:
+                raise NameError('No valid label.')
+
+        pl = ax.plot(data_global, data_global.lev, label=label, **kwargs)
+
+        if plot_diffs:
+            if icase == 0:
+                data_cntl = data_global.copy(deep=True)
+            else:
+                ax_diff = ax.twiny()
+                data_diff = data_global - data_cntl
+                data_diff.attrs = data_global.attrs
+                pl = ax_diff.plot(
+                    data_diff, data_diff.lev, label='Difference',
+                    color='0.5', alpha=0.5, **kwargs
+                )
+                ax_diff.set_xlabel('Difference')
+
+                ax_diff.plot([0, 0], ax_diff.get_ylim(), color='0.5', alpha=0.5,
+                        linestyle='dashed')
+
+                diff_max = abs(data_diff).max()
+                ax_diff.set_xlim([-2 * diff_max, 2 * diff_max])
+                       
+        
+    # Label using last used data
+    ax.set_ylabel('Level')
+    ax.set_xlabel('%s (%s)'%(data.long_name, data.units))
+    ax.legend(loc='best')
     
     return figure
 
