@@ -212,6 +212,12 @@ def get_data(dataset, field):
             data = 60 * 60 * 24 * 1e3 * data
             data.attrs = attrs
             data.attrs['units'] = 'mm/day'
+    elif field in ('QRS', 'QRSC', 'QRL', 'QRLC'):
+        if data.attrs['units'].lower() == 'k/s':
+            attrs = data.attrs
+            data = 60 * 60 * 24 * data
+            data.attrs = attrs
+            data.attrs['units'] = 'K/day'
         
     return data
 
