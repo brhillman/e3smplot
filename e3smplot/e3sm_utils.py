@@ -189,6 +189,26 @@ def get_data(dataset, field):
     elif field == 'clcalipso_ice':
         data = get_data(dataset, 'CLD_CAL_ICE')
         
+    elif field == 'CRM_QCLD':
+        crm_qc = get_data(dataset, 'CRM_QC')
+        crm_qi = get_data(dataset, 'CRM_QI')
+        data = crm_qc + crm_qi
+        data.attrs = crm_qc.attrs
+        data.attrs['long_name'] = 'Total CRM cloud water (liq + ice)'
+    elif field == 'CRM_QPRC':
+        crm_qpc = get_data(dataset, 'CRM_QPC')
+        crm_qpi = get_data(dataset, 'CRM_QPI')
+        data = crm_qpc + crm_qpi
+        data.attrs = crm_qpc.attrs
+        data.attrs['long_name'] = 'Total CRM precip water (liq + ice)'
+    elif field == 'CRM_QTOT':
+        crm_qcld = get_data(dataset, 'CRM_QCLD')
+        crm_qprc = get_data(dataset, 'CRM_QPRC')
+        crm_qv = get_data(dataset, 'CRM_QV')
+        data = crm_qcld + crm_qprc + crm_qv
+        data.attrs = crm_qv.attrs
+        data.attrs['long_name'] = 'Total CRM water (cld + prec + qv)'
+        
     else:
         raise NameError('%s not found in dataset.'%field)
     
