@@ -45,6 +45,8 @@ def plot_unstructured(xv, yv, data, antialiased=False, **kwargs):
         # if I'm using cartopy!
         if any(xvals < 90) and any(xvals > 270):
             xvals = numpy.where(xvals < 90, xvals + 360, xvals)
+        if any(xvals < -90 ) and any(xvals > 90  ):
+            xvals = numpy.where(xvals < -90, 180 - xvals, xvals)
         if any(yvals < -45) and any(yvals > 45):
             yvals = numpy.where(yvals < -45, yvals + 90, yvals)
         
