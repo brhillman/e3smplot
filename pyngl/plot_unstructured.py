@@ -25,6 +25,10 @@ def plot_unstructured(
     res.mpGridAndLimbOn = False
     res.mpPerimOn = False
 
+    # Additional options passed via kwargs
+    for key, val in kwargs.items():
+        setattr(res, key, val)
+
     # Make the plot
     plot = ngl.contour_map(wks, data, res)
     ngl.end()
@@ -43,7 +47,10 @@ def main(datafile, gridfile, varname):
     # Make plot
     plot = plot_unstructured(
         lon_edges.values, lat_edges.values, data.values,
-        plot_format='png', plot_name=varname
+        plot_format='png', plot_name=varname, 
+        mpGeophysicalLineColor='white',
+        lbOrientation='horizontal', 
+        lbTitleString='%s (%s)'%(data.long_name, data.units)
     )
 
 
