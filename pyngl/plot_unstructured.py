@@ -21,6 +21,10 @@ def plot_unstructured(
     res.sfXCellBounds = xv
     res.sfYCellBounds = yv
 
+    # Tweak plot appearance
+    res.mpGridAndLimbOn = False
+    res.mpPerimOn = False
+
     # Make the plot
     plot = ngl.contour_map(wks, data, res)
     ngl.end()
