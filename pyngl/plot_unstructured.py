@@ -5,19 +5,14 @@ import ngl
 import numpy
 import xarray
 
-def plot_unstructured(
-        xv, yv, data, plot_format='x11',
-        plot_name='dummy', **kwargs):
-
-    # Setup the canvas
-    wks = ngl.open_wks(plot_format, plot_name)
+def plot_unstructured(wks, xv, yv, data, **kwargs):
 
     # Set up annoying plot resources
     res = ngl.Resources()
     res.cnFillOn = True
     res.cnLinesOn = False
     res.cnFillPalette = 'MPL_viridis'
-    res.cnFillMode = 'CellFill'
+    res.cnFillMode = 'RasterFill'
     res.sfXCellBounds = xv
     res.sfYCellBounds = yv
 
@@ -31,27 +26,46 @@ def plot_unstructured(
 
     # Make the plot
     plot = ngl.contour_map(wks, data, res)
-    ngl.end()
 
     return plot
 
 
 def main(datafile, gridfile, varname):
+
     # Read data
     ds_data = xarray.open_dataset(datafile)
-    ds_grid = xarray.open_dataset(gridfile).rename({'grid_size': 'ncol'})
+    ds_grid = xarray.open_dataset(gridfile)
     data = ds_data[varname]
-    lon_edges = ds_grid['grid_corner_lon']
-    lat_edges = ds_grid['grid_corner_lat']
+
+    if 'time' in data.dims:
+        data = data.isel(time=0).squeeze()
+    if 'lev' in data.dims:
+        data = data.isel(lev=-1).squeeze()
+
+    if 'lon' in ds_grid and 'lat' in ds_grid:
+        x = ds_grid['lon']
+        y = ds_grid['lat']
+    elif 'grid_corner_lon' in ds_grid and 'grid_corner_lat' in ds_grid:
+        x = ds_grid['grid_corner_lon'].rename({'grid_size': 'ncol'})
+        y = ds_grid['grid_corner_lat'].rename({'grid_size': 'ncol'})
+
+    # Setup the canvas
+    plot_format='png'
+    plot_name='./' + varname
+    wks = ngl.open_wks(plot_format, plot_name)
 
     # Make plot
     plot = plot_unstructured(
-        lon_edges.values, lat_edges.values, data.values,
-        plot_format='png', plot_name=varname, 
+        wks, x.values, y.values, data.values,
         mpGeophysicalLineColor='white',
         lbOrientation='horizontal', 
-        lbTitleString='%s (%s)'%(data.long_name, data.units)
+        lbTitleString='%s (%s)'%(data.long_name, data.units),
+        cnFillMode='RasterFill',
+        cnLineLabelsOn=False, cnLinesOn=False,
     )
+
+    # Close things
+    ngl.end()
 
 
 if __name__ == '__main__':
