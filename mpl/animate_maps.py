@@ -1,27 +1,27 @@
 #!/usr/bin/env python3
 
-import plac, os, imageio, sys, numpy
+import plac, os, imageio, sys, numpy, functools
 from matplotlib import pyplot
 from matplotlib.tri import Triangulation
 from cartopy import crs
 from xarray import open_mfdataset
 from time import perf_counter
+from scipy.interpolate import griddata
 
 def open_files(*inputfiles):
 
     print('Found %i files'%len(inputfiles))
-    return open_mfdataset(sorted(inputfiles), chunks={'time': 1})
+    return open_mfdataset(sorted(inputfiles), combine='by_coords', chunks={'time': 1})
 
 
 def memoize(func):
     cache = dict()    
-    def memoized_func(*args):
-        if args in cache:
-            return cache[args]
-        result = func(*args)
-        cache[args] = result
-        return result    
-    
+    @functools.wraps(func)
+    def memoized_func(*args, **kwargs):
+        key = str(args) + str(kwargs)
+        if key not in cache:
+            cache[key] = func(*args, **kwargs)
+        return cache[key]
     return memoized_func
 
 
@@ -30,30 +30,47 @@ def get_triangulation(lon, lat):
     return Triangulation(lon, lat)
 
 
-@memoize
 def fix_longitudes(lon):
     lon.values = numpy.where(lon > 180, lon - 360, lon)
     return lon
 
 
-def plot_frame(dataset, variable_name, frame_name, 
+def get_data(ds, variable_name):
+    if variable_name in ds.variables.keys():
+        return ds[variable_name]
+    else:
+        raise NameError('%s not found in dataset'%variable_name)
+
+
+def plot_frame(dataset, variable_name, frame_name,
                lat_min=None, lat_max=None, lon_min=None, lon_max=None, 
-               projection=crs.PlateCarree(central_longitude=180),
+               nlon=360, nlat=180,
+               plot_method='regrid',
                **kwargs):
+
+    if 'projection' in kwargs.keys():
+        projection=kwargs['projection']
+        kwargs.pop('projection')
+    else:
+        projection=crs.PlateCarree()
 
     # Select data
     data = get_data(dataset, variable_name).squeeze()
     lon = get_data(dataset, 'lon').squeeze()
     lat = get_data(dataset, 'lat').squeeze()
 
+    # Reduce data
+    if 'lev' in data.dims:
+        data = data.isel(lev=-1)
+
     # Fix coordinates
     lon = fix_longitudes(lon)
 
     # Open figure
-    figure, axes = pyplot.subplots(
-        figsize=(10, 8),
-        subplot_kw=dict(projection=projection)
-    )
+    figure = pyplot.figure(figsize=(10, 8))
+    axes = pyplot.axes(projection=projection)
+    axes.coastlines()
+    axes.set_global()
 
     # Set extent
     if all(v is not None for v in [lat_min, lat_max, lon_min, lon_max]):
@@ -70,14 +87,22 @@ def plot_frame(dataset, variable_name, frame_name,
 
     # Plot data
     if 'ncol' in data.dims:
-        # Calculate triangulation
-        triangulation = get_triangulation(lon, lat)
+        if plot_method == 'triangulation':
+            # Calculate triangulation
+            triangulation = get_triangulation(lon.values, lat.values)
 
-        # Plot using triangulation
-        pl = axes.tripcolor(
-            triangulation, data,
-            transform=crs.PlateCarree(), **kwargs
-        )
+            # Plot using triangulation
+            pl = axes.tripcolor(
+                triangulation, data,
+                transform=crs.PlateCarree(), **kwargs
+            )
+        elif plot_method == 'regrid':
+            xi = numpy.linspace(-180, 180, int(nlon))
+            yi = numpy.linspace(-90, 90, int(nlat))
+            data_regridded = griddata((lon, lat), data, (xi[None,:], yi[:,None]), method='nearest')
+            pl = axes.pcolormesh(xi, yi, data_regridded, transform=crs.PlateCarree(), **kwargs)
+        else:
+            raise ValueError('method %s not known'%method)
     else:
         pl = axes.pcolormesh(
             lon, lat, data.transpose('lat', 'lon'),
@@ -85,8 +110,10 @@ def plot_frame(dataset, variable_name, frame_name,
         )
 
     # Label plot
-    axes.set_title('time = %s'%(data['time'].values))
-    axes.coastlines()
+    axes.set_title('time = %04i-%02i-%02i %02i:%02i:%02i'%(
+        data['time.year'], data['time.month'], data['time.day'],
+        data['time.hour'], data['time.minute'], data['time.second']
+    ))
 
     # Add a colorbar
     cb = pyplot.colorbar(
@@ -102,13 +129,16 @@ def plot_frame(dataset, variable_name, frame_name,
 
 # Get a time-varying longitude to be used to rotate map center to mimic earth
 # rotation in animations
-def rotate_longitude(itime, samples_per_day, start_lon=0):
-    central_longitude = (start_lon + itime * 360 / samples_per_day) % 360
+def rotate_longitude(itime, samples_per_day, start_lon=360):
+    central_longitude = (start_lon - itime * 360 / samples_per_day) % 360
     if central_longitude > 180: central_longitude = central_longitude - 360
     return central_longitude
    
 
-def plot_frames(dataset, variable_name, **kwargs):
+def plot_frames(
+        dataset, variable_name, 
+        rotate=False, samples_per_day=48, 
+        **kwargs):
 
     # Get data range so that all frames will be consistent
     if 'vmin' not in kwargs.keys(): kwargs['vmin'] = get_data(dataset, variable_name).min().values
@@ -119,7 +149,18 @@ def plot_frames(dataset, variable_name, **kwargs):
     print('Looping over %i time indices'%len(dataset.time)); sys.stdout.flush()
     for i in range(len(dataset.time)):
         frame_name = '%s.%i.png'%(variable_name, i)
-        plot_frame(dataset.isel(time=i), variable_name, frame_name, **kwargs)
+        if rotate:
+            central_longitude = rotate_longitude(i, samples_per_day)
+            plot_frame(
+                dataset.isel(time=i), variable_name, frame_name, 
+                projection=crs.Orthographic(central_longitude=central_longitude, central_latitude=20),
+                **kwargs
+            )
+        else:
+            plot_frame(
+                dataset.isel(time=i), variable_name, frame_name, 
+                **kwargs
+            )
         frames.append(frame_name)
         update_progress(i+1, len(dataset.time))
 
@@ -131,7 +172,7 @@ def animate_frames(outputfile, frames):
     print('Stitching %i frames together...'%(len(frames)), end='')
     sys.stdout.flush()
     images = [imageio.imread(frame) for frame in frames]
-    imageio.mimsave(outputfile, images)
+    imageio.mimsave(outputfile, images, duration=0.5)
     print('Done.'); sys.stdout.flush()
 
 
@@ -166,13 +207,20 @@ def update_progress(iteration, num_iterations, bar_length=10):
 
 def main(outputfile, variable_name, *inputfiles, **kwargs):
 
-    rotate = False
-
     # Open files
     dataset = open_files(*inputfiles)
 
     # Plot frames
-    frames = plot_frames(dataset, variable_name, **kwargs)
+    if 'rotate' in kwargs.keys() and 'samples_per_day' in kwargs.keys():
+        rotate=kwargs['rotate']
+        samples_per_day=kwargs['samples_per_day']
+        kwargs.pop('rotate')
+        kwargs.pop('samples_per_day')
+        frames = plot_frames(
+            dataset, variable_name, rotate=rotate, samples_per_day=samples_per_day, **kwargs
+        )
+    else:
+        frames = plot_frames(dataset, variable_name, **kwargs)
 
     # Stitch together frames into single animation
     animate_frames(outputfile, frames)
