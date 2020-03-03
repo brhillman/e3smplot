@@ -9,7 +9,8 @@ import numpy
 import xarray
 
 
-def plot_unstructured(xv, yv, data, antialiased=False, **kwargs):
+def plot_unstructured(
+        xv, yv, data, antialiased=False, vmin=None, vmax=None, **kwargs):
     """
     Plot unstructured data. xv and yv specify the x and y coordinates
     of the vertices of each cell and should have shape [ni,nv] where ni
@@ -34,20 +35,20 @@ def plot_unstructured(xv, yv, data, antialiased=False, **kwargs):
     # Create array of cell vertices, indexed [npoints, ncorners, 2]
     corners = numpy.stack([xv, yv], axis=2)
     
-    # Go back and fix corners where they wrap
+    # Go back and fix corners where they wrap; we shouldn't have to do
+    # this with cartopy, but it seems we do...
     for i in range(corners.shape[0]):
-
-        # Fix stuff that wraps around; I should NOT have to do this
-        # if I'm using cartopy!
         if any(corners[i,:,0] < -90) and any(corners[i,:,0] > 90):
-            corners[i,:,0] = numpy.where(corners[i,:,0] < -90, corners[i,:,0] +
-360, corners[i,:,0])
+            corners[i,:,0] = numpy.where(corners[i,:,0] < -90, corners[i,:,0] + 360, corners[i,:,0])
         if any(corners[i,:,1] < -45) and any(corners[i,:,1] > 45):
-            corners[i,:,1] = numpy.where(corners[i,:,1] < -45, corners[i,:,1] +
-90, corners[i,:,1])
-            
+            corners[i,:,1] = numpy.where(corners[i,:,1] < -45, corners[i,:,1] + 90, corners[i,:,1])
+
     # Create a PatchCollection from our aggregated list of PathPatches
     p = PolyCollection(corners, array=data, antialiaseds=antialiased, **kwargs)
+
+    # Set scale, mimicking vmin and vmax plot kwargs
+    if vmin is not None and vmax is not None:
+        p.set_clim([vmin, vmax])
 
     # Add the collection to the axes
     ax = pyplot.gca()
@@ -59,17 +60,6 @@ def plot_unstructured(xv, yv, data, antialiased=False, **kwargs):
     
     # Return collection of patches
     return p
-
-
-def wrap_corners(corners):
-    # Fix stuff that wraps around; I should NOT have to do this
-    # if I'm using cartopy!
-    for i in range(corners.shape[0]):
-        if any(corners[i,:,0] < -90) and any(corners[i,:,0] > 90):
-            corners[i,:,0] = numpy.where(corners[i,:,0] < -90, corners[i,:,0] + 360, corners[i,:,0])
-        if any(corners[i,:,1] < -45) and any(corners[i,:,1] > 45):
-            corners[i,:,1] = numpy.where(corners[i,:,1] < -45, corners[i,:,1] + 180, corners[i,:,1])
-    return corners
 
 
 def fix_lon(lon):
@@ -84,9 +74,14 @@ def main(datafile, gridfile, varname, plotfile=None):
     lon_edges = ds_grid['grid_corner_lon']
     lat_edges = ds_grid['grid_corner_lat']
 
+    # Reduce data if we need to
+    if 'time' in data.dims: data = data.isel(time=0).squeeze()
+    if 'lev' in data.dims: data = data.isel(lev=-1).squeeze()
+
     # Make plot
     figure, ax = pyplot.subplots(
         1, 1,
+        #subplot_kw=dict(projection=crs.Orthographic(central_longitude=-100))
         subplot_kw=dict(projection=crs.PlateCarree())
     )
     pl = plot_unstructured(
