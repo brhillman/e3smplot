@@ -4,14 +4,23 @@ import plac, os, imageio, sys, numpy, functools
 from matplotlib import pyplot
 from matplotlib.tri import Triangulation
 from cartopy import crs
+from cartopy.util import add_cyclic_point
 from xarray import open_mfdataset
 from time import perf_counter
 from scipy.interpolate import griddata
 
-def open_files(*inputfiles):
 
+def remove_dims(ds):
+    return ds.drop_vars(['P3_input_dim', 'P3_output_dim'], errors='ignore')
+
+
+def open_files(*inputfiles):
     print('Found %i files'%len(inputfiles))
-    return open_mfdataset(sorted(inputfiles), combine='by_coords', chunks={'time': 1})
+    return open_mfdataset(
+        sorted(inputfiles), combine='by_coords', 
+        preprocess=remove_dims,
+        chunks={'time': 1}
+    )
 
 
 def memoize(func):
@@ -37,10 +46,24 @@ def fix_longitudes(lon):
 
 def get_data(ds, variable_name):
     if variable_name in ds.variables.keys():
-        return ds[variable_name]
+        data = ds[variable_name]
+    elif variable_name == 'PRECT':
+        precc = get_data(ds, 'PRECC')
+        precl = get_data(ds, 'PRECL')
+        data = precc + precl
+        data.attrs = precc.attrs
+        data.attrs['long_name'] = 'Total precipitation rate'
     else:
         raise NameError('%s not found in dataset'%variable_name)
 
+    # Adjust units
+    if variable_name in ('PRECC', 'PRECL', 'PRECT'):
+        if data.attrs['units'].lower() == 'm/s':
+            attrs = data.attrs
+            data = 60 * 60 * 24 * 1e3 * data
+            data.attrs = attrs
+            data.attrs['units'] = 'mm/day'
+    return data
 
 def plot_frame(dataset, variable_name, frame_name,
                lat_min=None, lat_max=None, lon_min=None, lon_max=None, 
@@ -104,6 +127,8 @@ def plot_frame(dataset, variable_name, frame_name,
         else:
             raise ValueError('method %s not known'%method)
     else:
+        # Need to add a cyclic point
+        #_data, _lon = add_cyclic_point(data.transpose('lat', 'lon').values, coord=lon.values)
         pl = axes.pcolormesh(
             lon, lat, data.transpose('lat', 'lon'),
             transform=crs.PlateCarree(), **kwargs
@@ -148,7 +173,8 @@ def plot_frames(
     frames = []
     print('Looping over %i time indices'%len(dataset.time)); sys.stdout.flush()
     for i in range(len(dataset.time)):
-        frame_name = '%s.%i.png'%(variable_name, i)
+        frame_name = 'tmp_frames/%s.%i.png'%(variable_name, i)
+        os.makedirs(os.path.dirname(frame_name), exist_ok=True)
         if rotate:
             central_longitude = rotate_longitude(i, samples_per_day)
             plot_frame(
@@ -168,11 +194,11 @@ def plot_frames(
     return frames
 
 
-def animate_frames(outputfile, frames):
+def animate_frames(outputfile, frames, **kwargs):
     print('Stitching %i frames together...'%(len(frames)), end='')
     sys.stdout.flush()
     images = [imageio.imread(frame) for frame in frames]
-    imageio.mimsave(outputfile, images, duration=0.5)
+    imageio.mimsave(outputfile, images, **kwargs)
     print('Done.'); sys.stdout.flush()
 
 
@@ -210,10 +236,17 @@ def main(outputfile, variable_name, *inputfiles, **kwargs):
     # Open files
     dataset = open_files(*inputfiles)
 
+    # Pull out keyward args
+    animate_kw = {}
+    for key in ('time_per_frame',):
+        if key in kwargs.keys():
+            animate_kw[key] = kwargs[key]
+            kwargs.pop(key)
+
     # Plot frames
     if 'rotate' in kwargs.keys() and 'samples_per_day' in kwargs.keys():
         rotate=kwargs['rotate']
-        samples_per_day=kwargs['samples_per_day']
+        samples_per_day=float(kwargs['samples_per_day'])
         kwargs.pop('rotate')
         kwargs.pop('samples_per_day')
         frames = plot_frames(
@@ -223,7 +256,7 @@ def main(outputfile, variable_name, *inputfiles, **kwargs):
         frames = plot_frames(dataset, variable_name, **kwargs)
 
     # Stitch together frames into single animation
-    animate_frames(outputfile, frames)
+    animate_frames(outputfile, frames, **animate_kw)
 
     # Clean up
     remove_frames(frames)
