@@ -68,14 +68,8 @@ def get_data(ds, variable_name):
 def plot_frame(dataset, variable_name, frame_name,
                lat_min=None, lat_max=None, lon_min=None, lon_max=None, 
                nlon=360, nlat=180,
-               plot_method='regrid',
+               plot_method='regrid', projection=crs.PlateCarree(),
                **kwargs):
-
-    if 'projection' in kwargs.keys():
-        projection=kwargs['projection']
-        kwargs.pop('projection')
-    else:
-        projection=crs.PlateCarree()
 
     # Select data
     data = get_data(dataset, variable_name).squeeze()
@@ -175,7 +169,7 @@ def plot_frames(
     for i in range(len(dataset.time)):
         frame_name = 'tmp_frames/%s.%i.png'%(variable_name, i)
         os.makedirs(os.path.dirname(frame_name), exist_ok=True)
-        if rotate:
+        if rotate == "True":
             central_longitude = rotate_longitude(i, samples_per_day)
             plot_frame(
                 dataset.isel(time=i), variable_name, frame_name, 
@@ -185,6 +179,7 @@ def plot_frames(
         else:
             plot_frame(
                 dataset.isel(time=i), variable_name, frame_name, 
+                projection=crs.PlateCarree(central_longitude=180),
                 **kwargs
             )
         frames.append(frame_name)
@@ -240,20 +235,10 @@ def main(outputfile, variable_name, *inputfiles, **kwargs):
     animate_kw = {}
     for key in ('time_per_frame',):
         if key in kwargs.keys():
-            animate_kw[key] = kwargs[key]
-            kwargs.pop(key)
+            animate_kw[key] = kwargs.pop(key)
 
     # Plot frames
-    if 'rotate' in kwargs.keys() and 'samples_per_day' in kwargs.keys():
-        rotate=kwargs['rotate']
-        samples_per_day=float(kwargs['samples_per_day'])
-        kwargs.pop('rotate')
-        kwargs.pop('samples_per_day')
-        frames = plot_frames(
-            dataset, variable_name, rotate=rotate, samples_per_day=samples_per_day, **kwargs
-        )
-    else:
-        frames = plot_frames(dataset, variable_name, **kwargs)
+    frames = plot_frames(dataset, variable_name, **kwargs)
 
     # Stitch together frames into single animation
     animate_frames(outputfile, frames, **animate_kw)
