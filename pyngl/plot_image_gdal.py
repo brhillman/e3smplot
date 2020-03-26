@@ -3,6 +3,7 @@ import ngl
 import xarray as xr
 import numpy as np
 import warnings
+import os
 
 # Increase available buffer size for pyNGL workstations.
 # This is a workaround for errors that look like: 
@@ -91,29 +92,23 @@ def plot_image_gdal(
     return redMap, greenMap, blueMap
 
 
-def main(**kwargs):
-    # full path of input file
-    history_root = '/Users/bhillma/nersc_scratch/scream/regrid/fewer-p3-checks.FSCREAM-HR.ne1024np4_360x720cru_oRRS15to5.cori-knl_intel.1536x8x16.20200206-1553'
-    map_file_name = f'{history_root}/BlueMarble_land_shallow_2011_180centered.nc'
+def main(inputfile, outputfile, **kwargs):
 
     # output figure type and name
-    fig_type = 'png'
-    fig_file = 'bluemarble2'
-
-    # Plot a regional subset
-    lat1,lat2,lon1,lon2 = -90,90,0,360     # Global 
+    fig_name = os.path.splitext(outputfile)[0]
+    fig_type = os.path.splitext(outputfile)[1][1:]
 
     # create the plot workstation
-    wks = ngl.open_wks(fig_type, fig_file)
+    wks = ngl.open_wks(fig_type, fig_name)
 
     # Increase maximum buffer memory
     increase_workspace_memory(value=10000000000)
 
     # Read image data
-    ims = xr.open_dataset( map_file_name )
-    band1 = ims['Band1'].values
-    band2 = ims['Band2'].values
-    band3 = ims['Band3'].values
+    ds = xr.open_dataset(inputfile)
+    band1 = ds['Band1'].values
+    band2 = ds['Band2'].values
+    band3 = ds['Band3'].values
 
     # Plot image
     # mpCenterLonF=150 for Pacific; 340 for Atlantic; 200 Pacific v2
@@ -126,4 +121,4 @@ def main(**kwargs):
 
 
 if __name__ == '__main__':
-    main()
+    import plac; plac.call(main)
