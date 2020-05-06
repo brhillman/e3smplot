@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import xarray as xarray
+import numpy as numpy
 
 def open_files(*inputfiles):
     return xarray.open_mfdataset(
@@ -26,7 +27,7 @@ def get_data(ds, variable_name):
     elif variable_name == 'CLDTOT_MISR':
         clmisr = get_data(ds, 'CLD_MISR')
         tau_min = 0.3
-        data = clmisr.sel(cosp_tau=slice(tau_min, None)).sum(dim=('cosp_htmisr', 'cosp_tau'), keep_attrs=True)
+        data = clmisr.sel(cosp_tau=slice(tau_min, None)).sum(dim=('cosp_htmisr', 'cosp_tau'), keep_attrs=True, skipna=False)
         data.attrs['long_name'] = f'MISR total cloud area'
         data.attrs['description'] = f'sum(CLD_MISR(tau > {tau_min}))'
     elif variable_name == 'CLDLOW_MISR':
@@ -36,7 +37,7 @@ def get_data(ds, variable_name):
         data = clmisr.sel(
             cosp_tau=slice(tau_min, None),
             cosp_htmisr=slice(zbnd[0], zbnd[1])
-        ).sum(dim=('cosp_htmisr', 'cosp_tau'), keep_attrs=True)
+        ).sum(dim=('cosp_htmisr', 'cosp_tau'), keep_attrs=True, skipna=False)
         data.attrs['long_name'] = f'MISR low-level cloud area'
         data.attrs['description'] = f'sum(CLD_MISR(tau > {tau_min}, {zbnd[0]} <= z < {zbnd[1]}))'
     elif variable_name == 'CLDMED_MISR':
@@ -46,7 +47,7 @@ def get_data(ds, variable_name):
         data = clmisr.sel(
             cosp_tau=slice(tau_min, None),
             cosp_htmisr=slice(zbnd[0], zbnd[1])
-        ).sum(dim=('cosp_htmisr', 'cosp_tau'), keep_attrs=True)
+        ).sum(dim=('cosp_htmisr', 'cosp_tau'), keep_attrs=True, skipna=False)
         data.attrs['long_name'] = f'MISR mid-level cloud area'
         data.attrs['description'] = f'sum(CLD_MISR(tau > {tau_min}, {zbnd[0]} <= z < {zbnd[1]}))'
     elif variable_name == 'CLDHGH_MISR':
@@ -56,9 +57,37 @@ def get_data(ds, variable_name):
         data = clmisr.sel(
             cosp_tau=slice(tau_min, None),
             cosp_htmisr=slice(zbnd[0], zbnd[1])
-        ).sum(dim=('cosp_htmisr', 'cosp_tau'), keep_attrs=True)
+        ).sum(dim=('cosp_htmisr', 'cosp_tau'), keep_attrs=True, skipna=False)
         data.attrs['long_name'] = f'MISR high-level cloud area'
         data.attrs['description'] = f'sum(CLD_MISR(tau > {tau_min}, {zbnd[0]} <= z))'
+    elif variable_name == 'CLDLOW_ISCCP':
+        clisccp = get_data(ds, 'FISCCP1_COSP')
+        tmin = 0.3
+        pbnd = (None, 68000)
+        pmin = 68000
+        pmax = numpy.inf
+        data = clisccp.where(clisccp.cosp_tau>tmin, drop=True).where((clisccp.cosp_prs>pmin) & (clisccp.cosp_prs<=pmax), drop=True)
+        data = data.sum(dim=('cosp_prs', 'cosp_tau'), keep_attrs=True, skipna=False)
+        data.attrs['long_name'] = f'ISCCP low-level cloud area'
+        data.attrs['description'] = f'sum(FISCCP1_COSP(tau > {tmin}, {pmin} < prs <= {pmax}))'
+    elif variable_name == 'CLDMED_ISCCP':
+        clisccp = get_data(ds, 'FISCCP1_COSP')
+        tmin = 0.3
+        pmin = 44000
+        pmax = 68000
+        data = clisccp.where(clisccp.cosp_tau>tmin, drop=True).where((clisccp.cosp_prs>pmin) & (clisccp.cosp_prs<=pmax), drop=True)
+        data = data.sum(dim=('cosp_prs', 'cosp_tau'), keep_attrs=True, skipna=False)
+        data.attrs['long_name'] = f'ISCCP mid-level cloud area'
+        data.attrs['description'] = f'sum(FISCCP1_COSP(tau > {tmin}, {pmin} < prs <= {pmax}))'
+    elif variable_name == 'CLDHGH_ISCCP':
+        clisccp = get_data(ds, 'FISCCP1_COSP')
+        tmin = 0.3
+        pmin = -numpy.inf
+        pmax = 44000
+        data = clisccp.where(clisccp.cosp_tau>tmin, drop=True).where((clisccp.cosp_prs>pmin) & (clisccp.cosp_prs<=pmax), drop=True)
+        data = data.sum(dim=('cosp_prs', 'cosp_tau'), keep_attrs=True, skipna=False)
+        data.attrs['long_name'] = f'ISCCP high-level cloud area'
+        data.attrs['description'] = f'sum(FISCCP1_COSP(tau > {tmin}, {pmin} < prs <= {pmax}))'
     else:
         raise NameError('%s not found in dataset'%variable_name)
 
@@ -94,6 +123,7 @@ def area_average(data, weights, dims=None):
     # Copy over attributes, which we lose in the averaging
     # calculation
     data_mean.attrs = data.attrs
+    data_mean.name = data.name
 
     # Return averaged data
     return data_mean
