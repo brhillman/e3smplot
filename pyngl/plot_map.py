@@ -38,7 +38,7 @@ def plot_map(wks, x, y, data, **kwargs):
     return plot
 
 
-def main(datafile, varname, gridfile=None, **kwargs):
+def main(datafile, varname, plotname, gridfile=None, **kwargs):
 
     # Read data
     ds_data = xarray.open_dataset(datafile)
@@ -65,8 +65,7 @@ def main(datafile, varname, gridfile=None, **kwargs):
 
     # Setup the canvas
     plot_format='png'
-    plot_name='./' + varname
-    wks = ngl.open_wks(plot_format, plot_name)
+    wks = ngl.open_wks(plot_format, plotname)
 
     # Make plot
     plot = plot_map(
