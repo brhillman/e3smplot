@@ -1,3 +1,6 @@
 [submodule "cmclimate"]
 	path = cmclimate
 	url = https://github.com/serazing/cmclimate.git
+[submodule "mappy"]
+	path = mappy
+	url = git@github.com:brhillman/mappy.git
