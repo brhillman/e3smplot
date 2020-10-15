@@ -5,105 +5,8 @@ import sys
 import numpy
 import scipy, scipy.sparse
 import xarray
-from plot_map import plot_map
-
-def area_average(data, weights, dims=None):
-    
-    '''Calculate area-weighted average over dims.'''
-      
-    if dims is None: dims = data.dims
-        
-    # Need to broadcast weights to make sure they have the
-    # same size/shape as data. For example, data is (lat, lon)
-    # but we passed weights with shape (lat,), or data is
-    # (time, ncol) but we passed weights with shape (ncol,).
-    from xarray import broadcast
-    weights, *__ = broadcast(weights, data)
-    
-    # Mask weights consistent with data so we do not miscount
-    # missing columns
-    weights = weights.where(data.notnull())
-    
-    # Do the averaging        
-    data_mean = (weights * data).sum(dim=dims) / weights.sum(dim=dims)
-    
-    # Copy over attributes, which we lose in the averaging
-    # calculation
-    data_mean.attrs = data.attrs
-    
-    # Return averaged data
-    return data_mean
-
-
-def get_data(ds, vname):
-    if vname == 'FSNTOA':
-        if vname in ds.variables.keys():
-            return ds[vname]
-        elif 'toa_sw_all_3h' in ds.variables.keys() and 'toa_solar_all_3h' in ds.variables.keys():
-            flux_up = ds['toa_sw_all_3h']
-            flux_dn = ds['toa_solar_all_3h']
-            flux_net = flux_dn - flux_up
-            flux_net.attrs['long_name'] = 'Net TOA SW flux'
-            flux_net.attrs['units'] = 'W/m2'
-            return flux_net
-        else:
-            raise ValueError(f'No variables found in dataset to calculate {vname}')
-    if vname == 'FSNTOAC':
-        if vname in ds.variables.keys():
-            return ds[vname]
-        elif 'toa_sw_clr_3h' in ds.variables.keys() and 'toa_solar_all_3h' in ds.variables.keys():
-            flux_up = ds['toa_sw_clr_3h']
-            flux_dn = ds['toa_solar_all_3h']
-            flux_net = flux_dn - flux_up
-            flux_net.attrs['long_name'] = 'Net TOA SW clearsky flux'
-            flux_net.attrs['units'] = 'W/m2'
-            return flux_net
-        else:
-            raise ValueError(f'No variables found in dataset to calculate {vname}')
-    if vname == 'FLNT':
-        if vname in ds.variables.keys():
-            return ds[vname]
-        elif 'toa_lw_all_3h' in ds.variables.keys():
-            return ds['toa_lw_all_3h']
-        else:
-            raise ValueError(f'No variables found in dataset to calculate {vname}')
-    if vname == 'FLNTC':
-        if vname in ds.variables.keys():
-            return ds[vname]
-        elif 'toa_lw_clr_3h' in ds.variables.keys():
-            return ds['toa_lw_clr_3h']
-        else:
-            raise ValueError(f'No variables found in dataset to calculate {vname}')
-    if vname == 'CLDTOT':
-        if vname in ds.variables.keys():
-            return ds[vname]
-        elif 'cldarea_total_3h' in ds.variables.keys():
-            return ds['cldarea_total_3h']
-        else:
-            raise ValueError(f'No variables found in dataset to calculate {vname}')
-    else:
-        if vname in ds.variables.keys():
-            return ds[vname]
-        else:
-            raise ValueError(f'No variables found in dataset to calculate {vname}')
-
-
-def regrid_data(x1, y1, x2, y2, data):
-
-    # Interpoy1e to new grid
-    from scipy.interpolate import griddata
-    new_data = griddata((x1, y1), data, (x2.values[None,:], y2.values[:,None]), method='linear')
-
-    # Turn these into DataArrays
-    from xarray import DataArray
-    new_data = DataArray(
-        new_data, dims=('lat', 'lon'),
-        coords={'lon': x2, 'lat': y2},
-        attrs=data.attrs,
-    )
-
-    # Return DataArrays
-    return new_data
+from .plot_map import plot_map
+from ..e3sm_utils import get_data, area_average, regrid_data
 
 
 def get_coords(ds_data, ds_grid=None):
@@ -210,9 +113,15 @@ def plot_panel(wks, ds, vname, ds_grid=None, **kwargs):
             kwargs['cnFillPalette'] = 'MPL_viridis'
 
     # Difference plots ought to have symmetric contour levels about 0
-    if (data.min().values < 0 and data.max().values > 0):
+    if 'cnLevels' not in kwargs:
+        if (data.min().values < 0 and data.max().values > 0):
+            *__, levels = ngl.nice_cntr_levels(-abs(data).max().values,
+                    abs(data).max().values, returnLevels=True, aboutZero=True)
+            kwargs['cnLevelSelectionMode'] = 'ExplicitLevels'
+            kwargs['cnLevels'] = levels
+    else:
+        # Make sure explicit levels is set if we passed cnLevels
         kwargs['cnLevelSelectionMode'] = 'ExplicitLevels'
-        kwargs['cnLevels'] = numpy.linspace(-abs(data).max().values, abs(data).max().values, 11)
 
     # Plot
     pl = plot_map(
@@ -255,24 +164,34 @@ def main(test_files, cntl_files, varname, plotname,
     means = [compute_area_average(ds, varname).values for ds in datasets]
     print('done.')
 
+    # Get common contour levels
+    print('Compute global min/max...', end=''); sys.stdout.flush()
+    cmin = min([get_data(ds, varname).min().values for ds in datasets[:-1]])
+    cmax = max([get_data(ds, varname).max().values for ds in datasets[:-1]])
+    *__, clevels = ngl.nice_cntr_levels(cmin, cmax, returnLevels=True, max_steps=13)
+    *__, dlevels = ngl.nice_cntr_levels(
+       get_data(datasets[-1], varname).min().values,
+       get_data(datasets[-1], varname).max().values, 
+       aboutZero=True, returnLevels=True, max_steps=13,
+    )
+    levels_list = [clevels, clevels, dlevels]
+    print('done.')
+
     # Make plots
     print('Make plots...', end=''); sys.stdout.flush()
-    plot_name = f'{varname}'
     plot_format = plotname.split('.')[-1]
-    wks = ngl.open_wks(plot_format, plot_name)
+    wks = ngl.open_wks(plot_format, plotname)
     diff_name = f'{test_name} minus {cntl_name}'
     labels = [f'{label} ({m:.1f})' for (label, m) in zip((test_name, cntl_name, diff_name), means)]
-    print(labels)
     plots = [
-        plot_panel(wks, ds, varname, tiMainString=label)
-        for (ds, label) in zip(datasets, labels)
+        plot_panel(wks, ds, varname, tiMainString=label, cnLevels=levels, **kwargs)
+        for (ds, label, levels) in zip(datasets, labels, levels_list)
     ]
     print('done.')
 
     # Panel plots
     print('Closing plot workspace and writing figures...', end=''); sys.stdout.flush()
     ngl.panel(wks, plots, [1, len(plots)])
-    ngl.end()
     print('done.')
 
 
