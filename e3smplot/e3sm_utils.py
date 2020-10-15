@@ -156,6 +156,44 @@ def get_data(dataset, field):
         data.attrs['long_name'] = 'Top of model net radiative flux'
         data.attrs['units'] = net_sw_flux.attrs['units']
         data.attrs['formula'] = 'FSNT - FLNT'
+    elif field == 'FSNTOA':
+        if 'toa_sw_all_3h' in dataset.variables.keys() and 'toa_solar_all_3h' in dataset.variables.keys():
+            flux_up = dataset['toa_sw_all_3h']
+            flux_dn = dataset['toa_solar_all_3h']
+            data = flux_dn - flux_up
+            data.attrs['long_name'] = 'Net TOA SW flux'
+            data.attrs['units'] = 'W/m2'
+        else:
+            raise ValueError(f'No variables found in dataset to calculate {field}')
+    elif field == 'FSNTOAC':
+        if 'toa_sw_clr_3h' in dataset.variables.keys() and 'toa_solar_all_3h' in dataset.variables.keys():
+            flux_up = dataset['toa_sw_clr_3h']
+            flux_dn = dataset['toa_solar_all_3h']
+            data = flux_dn - flux_up
+            data.attrs['long_name'] = 'Net TOA SW clearsky flux'
+            data.attrs['units'] = 'W/m2'
+        else:
+            raise ValueError(f'No variables found in dataset to calculate {field}')
+    elif field == 'FLNT':
+        if 'toa_lw_all_3h' in dataset.variables.keys():
+            data = dataset['toa_lw_all_3h']
+            data.attrs['long_name'] = 'Longwave flux at TOA'
+        else:
+            raise ValueError(f'No variables found in dataset to calculate {field}')
+    elif field == 'FLNTC':
+        if 'toa_lw_clr_3h' in dataset.variables.keys():
+            data = dataset['toa_lw_clr_3h']
+            data.attrs['long_name'] = 'Longwave clear-sky flux at TOA'
+        else:
+            raise ValueError(f'No variables found in dataset to calculate {field}')
+    elif field == 'CLDTOT':
+        # CERES-SYN version of CLDTOT
+        if 'cldarea_total_3h' in dataset.variables.keys():
+            data = dataset['cldarea_total_3h']
+            data.attrs['long_name'] = 'Cloud area fraction'
+            data.attrs['units'] = '%'
+        else:
+            raise ValueError(f'No variables found in dataset to calculate {field}')
     elif field == 'CLDLIQICE':
         cldliq = get_data(dataset, 'CLDLIQ')
         cldice = get_data(dataset, 'CLDICE')
@@ -219,7 +257,7 @@ def get_data(dataset, field):
             data = 1e3 * data
             data.attrs = attrs
             data.attrs['units'] = 'g/m2'
-    elif field in ('cltcalipso', 'cltcalipso_liq', 'cltcalipso_ice',
+    elif field in ('CLDTOT', 'cltcalipso', 'cltcalipso_liq', 'cltcalipso_ice',
                    'clcalipso',  'clcalipso_liq',  'clcalipso_ice'):
         if data.units.lower() in ('1', 'fraction', 'none', '1 fraction'):
             attrs = data.attrs
@@ -335,3 +373,21 @@ def mask_consistent(data_arrays):
             data_arrays[iarray] = data_arrays[iarray].where(data_arrays[jarray].notnull())
                                                             
     return data_arrays
+
+
+def regrid_data(x1, y1, x2, y2, data):
+
+    # Interpolatee to new grid
+    from scipy.interpolate import griddata
+    new_data = griddata((x1, y1), data, (x2.values[None,:], y2.values[:,None]), method='linear')
+
+    # Turn these into DataArrays
+    from xarray import DataArray
+    new_data = DataArray(
+        new_data, dims=('lat', 'lon'),
+        coords={'lon': x2, 'lat': y2},
+        attrs=data.attrs,
+    )
+
+    # Return DataArrays
+    return new_data
