@@ -357,31 +357,6 @@ def fix_longitudes(lon):
     return lon
 
 
-def regrid_data(lon, lat, data, nlon=360, nlat=180):
-    
-    # Define new coordinates
-    import numpy
-    new_lon = numpy.linspace(0, 360, nlon)
-    new_lat = numpy.linspace(-90, 90, nlat)
-    
-    # Interpolate to new grid
-    from scipy.interpolate import griddata
-    new_data = griddata((lon, lat), data, (new_lon[None,:], new_lat[:,None]), method='linear')
-    
-    # Turn these into DataArrays
-    from xarray import DataArray
-    new_lon = DataArray(new_lon, dims=('lon',), attrs={'long_name': 'longitude'})
-    new_lat = DataArray(new_lat, dims=('lat',), attrs={'long_name': 'latitude'})
-    new_data = DataArray(
-        new_data, dims=('lat', 'lon'), 
-        coords={'lon': new_lon, 'lat': new_lat},
-        attrs=data.attrs,
-    )
-    
-    # Return DataArrays
-    return new_lon, new_lat, new_data
-
-
 def plot_map(lon, lat, data, lon_corners=None, lat_corners=None, method='pcolor', **kwargs):
 
     # Fix longitudes
