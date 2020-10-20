@@ -16,8 +16,13 @@ map_vars = (
     'FLNTC',
     #'PRECT',
     'CLDTOT',
-    #'SHFLX',
-    #'TREFHT',
+    'SHFLX',
+    'TREFHT',
+    'TMQ',
+)
+
+time_series_vars = (
+    'FSNTOA',
 )
 
 # List of fields we want to make global mean time series for
@@ -30,6 +35,7 @@ obs_sources = {
     'FLNTC'  : 'CERES-SYN',
     'PRECT'  : 'GPM',
     'CLDTOT' : 'CERES-SYN',
+    'TMQ'    : 'ERA5',
     'SHFLX'  : 'ERA5',
     'TREFHT' : 'ERA5',
 }
@@ -38,7 +44,7 @@ obs_sources = {
 map_files = {
     'CERES-SYN': '/global/cscratch1/sd/bhillma/grids/map_ne1024pg2_to_ceres1deg_nco.nc',
     'GPM': None,
-    'ERA5': None,
+    'ERA5': '/global/cscratch1/sd/bhillma/grids/map_ne1024pg2_to_era5_nco.nc',
 }
 
 test_case_name = 'SCREAM-HR'
@@ -46,20 +52,29 @@ test_data_path = '/global/cscratch1/sd/terai/e3sm_scratch/cori-knl/master.ne1024
 obs_data_path = {
     'CERES-SYN': '/global/cfs/cdirs/e3sm/terai/Obs_datasets/CERES',
     'GPM': None,
-    'ERA5': None,
+    'ERA5': '/global/cfs/cdirs/e3sm/bhillma/obs_datasets/ERA5',
+}
+obs_data_prefix = {
+    'FSNTOA' : '',
+    'FSNTOAC': '',
+    'FLNT'   : '',
+    'FLNTC'  : '',
+    'PRECT'  : '',
+    'CLDTOT' : '',
+    'SHFLX': 'ERA5_surf',
+    'TREFHT': 'ERA5_surf',
+    'TMQ': 'ERA5_surf',
 }
 graphics_root = './graphics'
 os.makedirs(graphics_root, exist_ok=True)
 
 for vname in map_vars:
 
-    # Only processed CERES data so far
-    if obs_sources[vname] is not 'CERES-SYN': continue
     print(f'Processing {vname}...')
 
     # Find files
     test_files = sorted(glob(f'{test_data_path}/*.h1.*.nc'))
-    obs_files = sorted(glob(f'{obs_data_path[obs_sources[vname]]}/*.nc'))
+    obs_files = sorted(glob(f'{obs_data_path[obs_sources[vname]]}/{obs_data_prefix[vname]}*.nc'))
 
     # Compare maps
     figname = f'{graphics_root}/{vname}_{test_case_name}_vs_{obs_sources[vname]}.png'
