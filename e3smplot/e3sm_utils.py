@@ -21,6 +21,7 @@ def get_pressure(dataset, interfaces=False):
 
 # Define function to read specialized data from E3SM files
 def get_data(dataset, field):
+    data = None
     if field in dataset.variables.keys():
         data = dataset[field]
     elif field == 'TSI':
@@ -163,8 +164,6 @@ def get_data(dataset, field):
             data = flux_dn - flux_up
             data.attrs['long_name'] = 'Net TOA SW flux'
             data.attrs['units'] = 'W/m2'
-        else:
-            raise ValueError(f'No variables found in dataset to calculate {field}')
     elif field == 'FSNTOAC':
         if 'toa_sw_clr_3h' in dataset.variables.keys() and 'toa_solar_all_3h' in dataset.variables.keys():
             flux_up = dataset['toa_sw_clr_3h']
@@ -172,28 +171,20 @@ def get_data(dataset, field):
             data = flux_dn - flux_up
             data.attrs['long_name'] = 'Net TOA SW clearsky flux'
             data.attrs['units'] = 'W/m2'
-        else:
-            raise ValueError(f'No variables found in dataset to calculate {field}')
     elif field == 'FLNT':
         if 'toa_lw_all_3h' in dataset.variables.keys():
             data = dataset['toa_lw_all_3h']
             data.attrs['long_name'] = 'Longwave flux at TOA'
-        else:
-            raise ValueError(f'No variables found in dataset to calculate {field}')
     elif field == 'FLNTC':
         if 'toa_lw_clr_3h' in dataset.variables.keys():
             data = dataset['toa_lw_clr_3h']
             data.attrs['long_name'] = 'Longwave clear-sky flux at TOA'
-        else:
-            raise ValueError(f'No variables found in dataset to calculate {field}')
     elif field == 'CLDTOT':
         # CERES-SYN version of CLDTOT
         if 'cldarea_total_3h' in dataset.variables.keys():
             data = dataset['cldarea_total_3h']
             data.attrs['long_name'] = 'Cloud area fraction'
             data.attrs['units'] = '%'
-        else:
-            raise ValueError(f'No variables found in dataset to calculate {field}')
     elif field == 'CLDLIQICE':
         cldliq = get_data(dataset, 'CLDLIQ')
         cldice = get_data(dataset, 'CLDICE')
@@ -246,10 +237,32 @@ def get_data(dataset, field):
         data = crm_qcld + crm_qprc + crm_qv
         data.attrs = crm_qv.attrs
         data.attrs['long_name'] = 'Total CRM water (cld + prec + qv)'
-        
-    else:
-        raise NameError('%s not found in dataset.'%field)
+    elif field == 'TREFHT':
+        if 't2m' in dataset.variables.keys():
+            data = get_data(dataset, 't2m')
+    elif field == 'SHFLX':
+        if 'msshf' in dataset.variables.keys():
+            data = get_data(dataset, 'msshf')
+            #data.values = -data.values
+    elif field == 'longitude':
+        if 'lon' in dataset.variables.keys():
+            data = get_data(dataset, 'lon')
+        elif 'xc' in dataset.variables.keys():
+            data = get_data(dataset, 'xc')
+    elif field == 'latitude':
+        if 'lat' in dataset.variables.keys():
+            data = get_data(dataset, 'lat')
+        elif 'yc' in dataset.variables.keys():
+            data = get_data(dataset, 'yc')
+    elif field == 'TMQ':
+        if 'tcwv' in dataset.variables.keys():
+            data = get_data(dataset, 'tcwv')
+
     
+    # Check if we were able to find or derive the requested field
+    if data is None:
+        raise ValueError(f'{field} not found in dataset and no variables found to derive') 
+
     # Adjust units if necessary
     if field in ('TGCLDLWP', 'TGCLDIWP', 'TGCLDWP'):
         if data.units == 'kg/m2':
