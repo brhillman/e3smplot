@@ -7,6 +7,7 @@ import scipy, scipy.sparse
 import xarray
 from .plot_map import plot_map
 from ..e3sm_utils import get_data, area_average, regrid_data
+from ..utils import nice_cntr_levels
 
 
 def get_coords(ds_data, ds_grid=None):
@@ -20,8 +21,8 @@ def get_coords(ds_data, ds_grid=None):
         else:
             raise RuntimeError('No valid coordinates in grid file.')
     else:
-        x = ds_data['lon']
-        y = ds_data['lat']
+        x = get_data(ds_data, 'longitude')
+        y = get_data(ds_data, 'latitude')
     return x, y
 
 
@@ -115,7 +116,7 @@ def plot_panel(wks, ds, vname, ds_grid=None, **kwargs):
     # Difference plots ought to have symmetric contour levels about 0
     if 'cnLevels' not in kwargs:
         if (data.min().values < 0 and data.max().values > 0):
-            *__, levels = ngl.nice_cntr_levels(-abs(data).max().values,
+            *__, levels = nice_cntr_levels(-abs(data).max().values,
                     abs(data).max().values, returnLevels=True, aboutZero=True)
             kwargs['cnLevelSelectionMode'] = 'ExplicitLevels'
             kwargs['cnLevels'] = levels
@@ -137,15 +138,43 @@ def plot_panel(wks, ds, vname, ds_grid=None, **kwargs):
     return pl
 
 
+def open_dataset(files, **kwargs):
+    # Open dataset as a dask array
+    ds = xarray.open_mfdataset(sorted(files), combine='by_coords', drop_variables='P3_output_dim', **kwargs) 
+
+    # Rename coordinate variables
+    if 'latitude' in ds.dims: ds = ds.rename({'latitude': 'lat'})
+    if 'longitude' in ds.dims: ds = ds.rename({'longitude': 'lon'})
+
+    if 'msshf' in ds.variables.keys():
+        ds['msshf'].values = -ds['msshf'].values
+
+    # Return dataset
+    return ds
+
+
+def get_contour_levels(data_arrays, percentile=2, **kwargs):
+    # Try to get robust contour intervals
+    try:
+        cmin = min([numpy.nanpercentile(da.values, percentile) for da in data_arrays])
+        cmax = max([numpy.nanpercentile(da.values, 100-percentile) for da in data_arrays])
+        if 'aboutZero' not in kwargs.keys(): kwargs['aboutZero'] = (cmin < 0 and cmax > 0)
+        *__, clevels = nice_cntr_levels(cmin, cmax, returnLevels=True, max_steps=13, **kwargs)
+    # Fall back to just using the min and max to set the limits
+    except:
+        cmin = min([da.min().values for da in data_arrays])
+        cmax = max([da.max().values for da in data_arrays])
+        if 'aboutZero' not in kwargs.keys(): kwargs['aboutZero'] = (cmin < 0 and cmax > 0)
+        *__, clevels = nice_cntr_levels(cmin, cmax, returnLevels=True, max_steps=13, **kwargs)
+    return clevels
+
+
 def main(test_files, cntl_files, varname, plotname, 
         test_name="Model", cntl_name="Obs", map_file=None, **kwargs):
 
     # Read data
     print('Open datasets...', end=''); sys.stdout.flush()
-    datasets = [
-        xarray.open_mfdataset(sorted(files), combine='by_coords', drop_variables='P3_output_dim') 
-        for files in (test_files, cntl_files)
-    ]
+    datasets = [open_dataset(files) for files in (test_files, cntl_files)]
     print('done.')
 
     # Subset and time average
@@ -165,15 +194,9 @@ def main(test_files, cntl_files, varname, plotname,
     print('done.')
 
     # Get common contour levels
-    print('Compute global min/max...', end=''); sys.stdout.flush()
-    cmin = min([get_data(ds, varname).min().values for ds in datasets[:-1]])
-    cmax = max([get_data(ds, varname).max().values for ds in datasets[:-1]])
-    *__, clevels = ngl.nice_cntr_levels(cmin, cmax, returnLevels=True, max_steps=13)
-    *__, dlevels = ngl.nice_cntr_levels(
-       get_data(datasets[-1], varname).min().values,
-       get_data(datasets[-1], varname).max().values, 
-       aboutZero=True, returnLevels=True, max_steps=13,
-    )
+    print('Find good clevels for plotting...', end=''); sys.stdout.flush()
+    clevels = get_contour_levels([get_data(ds, varname) for ds in datasets[:-1]])
+    dlevels = get_contour_levels([get_data(datasets[-1], varname),], aboutZero=True)
     levels_list = [clevels, clevels, dlevels]
     print('done.')
 
