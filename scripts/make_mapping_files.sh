@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export PATH=~zender/bin_cori:$PATH
+
 # Output root
 output_root=${SCRATCH}/grids
 mkdir -p ${output_root}
@@ -32,14 +34,14 @@ fi
 
 
 obs_name="era5"
-obs_file="/global/cfs/cdirs/e3sm/terai/Obs_datasets/ERA5/ERA5_surf_20200101_20200229.nc"
-obs_grid="${output_root}/era5_scrip.nc"
+obs_file="/global/cfs/cdirs/e3sm/bhillma/obs_datasets/ERA5/ERA5_surf_20200101_20200229.nc"
+obs_grid="${output_root}/era5_scrip_fix.nc"
 echo "Generate obs_grid file ${obs_grid}"
 if [ ! -e ${obs_grid} ]; then
     ncks --rgr infer --rgr scrip=${obs_grid} ${obs_file} ~/foo.nc
 fi
 
-method="aave"
+method="nco"
 map_file="${output_root}/map_${model_name}_to_${obs_name}_${method}.nc"
 if [ ! -e ${map_file} ]; then
     echo "Generate mapping file ${map_file}"
