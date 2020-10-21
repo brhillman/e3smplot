@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+import numpy
+import xarray
+
 def get_pressure(dataset, interfaces=False):
     if interfaces:
         a = dataset['hyai']
@@ -17,6 +20,33 @@ def get_pressure(dataset, interfaces=False):
     pressure.attrs['long_name'] = 'Pressure'
     
     return pressure
+
+def open_dataset(files, **kwargs):
+
+    # Open dataset as a dask array
+    ds = xarray.open_mfdataset(
+        sorted(files), combine='by_coords',
+        drop_variables=('P3_output_dim', 'P3_input_dim'), **kwargs
+    ) 
+
+    # Rename coordinate variables
+    if 'latitude' in ds.dims: ds = ds.rename({'latitude': 'lat'})
+    if 'longitude' in ds.dims: ds = ds.rename({'longitude': 'lon'})
+
+    # Fix sensible heat flux
+    # TODO: should not need to do this
+    if 'msshf' in ds.variables.keys():
+        ds['msshf'].values = -ds['msshf'].values
+
+    # Convert cftime coordinate
+    if isinstance(ds.time.values[0], cftime._cftime.DatetimeNoLeap):
+        try:
+            ds['time'] = ds.indexes['time'].to_datetimeindex()
+        except:
+            print('Could not convert times to datetimeindex. But proceeding anyway...')
+
+    # Return dataset
+    return ds
 
 
 # Define function to read specialized data from E3SM files
@@ -293,6 +323,31 @@ def get_data(dataset, field):
     return data
 
 
+def get_coords(ds_data, ds_grid=None):
+    if ds_grid is not None:
+        if 'lon' in ds_grid and 'lat' in ds_grid:
+            x = ds_grid['lon']
+            y = ds_grid['lat']
+        elif 'grid_corner_lon' in ds_grid and 'grid_corner_lat' in ds_grid:
+            x = ds_grid['grid_corner_lon']
+            y = ds_grid['grid_corner_lat']
+        else:
+            raise RuntimeError('No valid coordinates in grid file.')
+    else:
+        x = get_data(ds_data, 'longitude')
+        y = get_data(ds_data, 'latitude')
+    return x, y
+
+
+def get_area_weights(ds):
+    # Get weights; either use pre-computed or cosine(latitude) weights
+    if 'area' in ds.variables.keys():
+        wgt = ds.area
+    else:
+        wgt = numpy.cos(ds.lat * numpy.pi / 180.0)
+    return wgt
+
+
 def read_files(*files, fix_time=False, year_offset=None, **kwargs):
     # read files without decoding timestamps, because control dates are
     # probably outside pandas valid range
@@ -404,3 +459,69 @@ def regrid_data(x1, y1, x2, y2, data):
 
     # Return DataArrays
     return new_data
+
+
+def calculate_zonal_mean(data, weights, old_lat, avg_dims=None, lat_edges=None, nlat=180):
+    
+    import numpy as numpy
+
+    # Mask data weights
+    weights, *__ = xarray.broadcast(weights, data)
+    weights = weights.where(data.notnull())
+    
+    # Calculate new latitudes
+    if lat_edges is None:
+        lat_edges = numpy.linspace(-90, 90, nlat+1)
+
+    # Figure out what dimensions we are going to average over
+    if avg_dims is None: avg_dims = data.dims
+        
+    # Calculating zonal mean for each latitude by binning data according to lat values
+    # TODO: generalize this to arbitrary dimensions and ordering
+    lat_centers = numpy.zeros(len(lat_edges) - 1)
+    lat_centers2 = numpy.array([(y1 + y2) / 2.0 for (y1, y2) in zip(lat_edges[:-1], lat_edges[1:])])
+    if 'lev' in data.dims:
+        data_zonal = numpy.zeros([len(lat_edges) - 1, len(data['lev'])])
+    else:
+        data_zonal = numpy.zeros(len(lat_edges) - 1)
+
+    # TODO: This will not work well for very large datasets; we need to figure
+    # out a better way of doing this. May need to just remap the unstructured
+    # grid first and compute a zonal mean in the usual way
+    for ilat in range(len(lat_edges) - 1):
+        
+        # Find latitude bounds
+        lat1 = lat_edges[ilat]
+        lat2 = lat_edges[ilat+1]
+        
+        # Calculate latitude centers from bounds
+        lat_centers[ilat] = (lat_edges[ilat+1] + lat_edges[ilat]) / 2.0
+
+        # Calculate mean for this latitude band
+        data_band = data.where(old_lat > lat1).where(old_lat <= lat2)
+        weights_band = weights.where(old_lat > lat1).where(old_lat <= lat2)
+        data_zonal[ilat, ...] = (weights_band * data_band).sum(dim=avg_dims) / weights_band.sum(dim=avg_dims)
+        
+    # Turn these into DataArrays
+    # TODO: generalize to arbitrary dimensions and ordering
+    from xarray import DataArray
+    lat_centers = DataArray(
+        lat_centers,
+        dims=('lat',),
+        attrs={'long_name': 'Latitude', 'units': 'Degrees north'}
+    )
+    if 'lev' in data.dims:
+        dims = ('lat', 'lev')
+        coords = {'lat': lat_centers, 'lev': data.lev}
+    else:
+        dims = ('lat')
+        coords = {'lat': lat_centers}
+
+    data_zonal = DataArray(
+        data_zonal,
+        dims=dims, coords=coords, attrs=data.attrs
+    )
+    return data_zonal, lat_centers
+
+
+
