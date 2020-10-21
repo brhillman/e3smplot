@@ -6,24 +6,21 @@ import numpy
 import scipy, scipy.sparse
 import xarray
 from .plot_map import plot_map
-from ..e3sm_utils import get_data, area_average, regrid_data
-from ..utils import nice_cntr_levels
+from ..e3sm_utils import get_data, area_average, regrid_data, get_coords
+from ..utils import nice_cntr_levels, apply_map
+import cftime
 
 
-def get_coords(ds_data, ds_grid=None):
-    if ds_grid is not None:
-        if 'lon' in ds_grid and 'lat' in ds_grid:
-            x = ds_grid['lon']
-            y = ds_grid['lat']
-        elif 'grid_corner_lon' in ds_grid and 'grid_corner_lat' in ds_grid:
-            x = ds_grid['grid_corner_lon']
-            y = ds_grid['grid_corner_lat']
-        else:
-            raise RuntimeError('No valid coordinates in grid file.')
-    else:
-        x = get_data(ds_data, 'longitude')
-        y = get_data(ds_data, 'latitude')
-    return x, y
+def convert_time(ds):
+
+    # Convert cftime coordinate
+    if isinstance(ds.time.values[0], cftime._cftime.DatetimeNoLeap):
+        try:
+            ds['time'] = ds.indexes['time'].to_datetimeindex()
+        except:
+            print('Could not convert times to datetimeindex. But proceeding anyway...')
+
+    return ds
 
 
 def subset_time(datasets):
@@ -57,14 +54,17 @@ def compute_differences(ds1, ds2, vname, map_file=None):
             da1 = regrid_data(x1, y1, x2, y2, da1)
         else:
             # apply map
-            ds_map = xarray.open_dataset(map_file)
-            weights = scipy.sparse.coo_matrix((ds_map['S'].values, (ds_map['row'].values-1, ds_map['col'].values-1)))
-            da1_regrid = weights.dot(da1)
-            da1_regrid = xarray.DataArray(
-                da1_regrid.reshape(da2.shape), dims=da2.dims, coords=da2.coords,
-                attrs=da1.attrs
-            )
-            da1 = da1_regrid
+            if True:
+                da1 = apply_map(da1, map_file, template=da2)
+            else:
+                ds_map = xarray.open_dataset(map_file)
+                weights = scipy.sparse.coo_matrix((ds_map['S'].values, (ds_map['row'].values-1, ds_map['col'].values-1)))
+                da1_regrid = weights.dot(da1)
+                da1_regrid = xarray.DataArray(
+                    da1_regrid.reshape(da2.shape), dims=da2.dims, coords=da2.coords,
+                    attrs=da1.attrs
+                )
+                da1 = da1_regrid
 
     # Now compute difference
     da_diff = da1 - da2
@@ -140,7 +140,8 @@ def plot_panel(wks, ds, vname, ds_grid=None, **kwargs):
 
 def open_dataset(files, **kwargs):
     # Open dataset as a dask array
-    ds = xarray.open_mfdataset(sorted(files), combine='by_coords', drop_variables='P3_output_dim', **kwargs) 
+    ds = xarray.open_mfdataset(
+        sorted(files), combine='by_coords', drop_variables=('P3_output_dim', 'P3_input_dim'), **kwargs) 
 
     # Rename coordinate variables
     if 'latitude' in ds.dims: ds = ds.rename({'latitude': 'lat'})
@@ -148,6 +149,9 @@ def open_dataset(files, **kwargs):
 
     if 'msshf' in ds.variables.keys():
         ds['msshf'].values = -ds['msshf'].values
+
+    # Fix times so we can subset later
+    ds = convert_time(ds)
 
     # Return dataset
     return ds

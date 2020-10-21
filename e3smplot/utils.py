@@ -1,4 +1,6 @@
 import numpy
+import xarray
+import scipy.sparse
 
 ################################################################
 # This function is one of two codes contributed by Lou Wicker
@@ -142,3 +144,14 @@ def nice_cntr_levels(lmin, lmax, outside=True, max_steps=15, cint=None, returnLe
         else:
             return am1, ax1, cint
         
+
+def apply_map(da, map_file, template=None):
+    ds_map = xarray.open_dataset(map_file)
+    weights = scipy.sparse.coo_matrix((ds_map['S'].values, (ds_map['row'].values-1, ds_map['col'].values-1)))
+    da_regrid = weights.dot(da)
+    if isinstance(template, xarray.DataArray):
+        da_regrid = xarray.DataArray(
+            da_regrid.reshape(template.shape), dims=template.dims, coords=template.coords,
+            attrs=da.attrs
+        )
+    return da_regrid
