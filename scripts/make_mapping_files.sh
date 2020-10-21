@@ -6,14 +6,19 @@ export PATH=~zender/bin_cori:$PATH
 output_root=${SCRATCH}/grids
 mkdir -p ${output_root}
 
+# Set uid for output_root
+chgrp e3sm ${output_root}
+chmod g+s ${output_root}
+
 # Model grid
-model_name="ne1024pg2"
-model_grid="${output_root}/ne1024pg2_scrip_fix.nc"
+ne=256
+model_name="ne${ne}pg2" #"ne1024pg2"
+model_grid="${output_root}/ne${ne}pg2_scrip.nc" #"${output_root}/ne1024pg2_scrip_fix.nc"
 echo "Generate model_grid file ${model_grid}"
 if [ ! -e ${model_grid} ]; then
-    GenerateCSMesh --alt --res 1024 --file ${output_root}/ne1024.g
-    GenerateVolumetricMesh --in ${output_root}/ne1024.g --out ${output_root}/ne1024pg2.g --np 2 --uniform
-    ConvertExodusToSCRIP --in ${output_root}/ne1024pg2.g --out ${model_grid}
+    GenerateCSMesh --alt --res ${ne} --file ${output_root}/ne${ne}.g
+    GenerateVolumetricMesh --in ${output_root}/ne${ne}.g --out ${output_root}/ne${ne}pg2.g --np 2 --uniform
+    ConvertExodusToSCRIP --in ${output_root}/ne${ne}pg2.g --out ${model_grid}
 fi
 
 # Obs grids
@@ -31,7 +36,6 @@ if [ ! -e ${map_file} ]; then
     echo "Generate mapping file ${map_file}"
     ncremap --fl_fmt=64bit_data --alg_typ=nco --src_grd=${model_grid} --dst_grd=${obs_grid} -m ${map_file}
 fi
-
 
 obs_name="era5"
 obs_file="/global/cfs/cdirs/e3sm/bhillma/obs_datasets/ERA5/ERA5_surf_20200101_20200229.nc"
