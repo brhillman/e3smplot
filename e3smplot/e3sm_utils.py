@@ -222,11 +222,20 @@ def get_data(dataset, field):
         data.attrs = cldliq.attrs
         data.attrs['long_name'] = 'Combined liq+ice condensate'
     elif field == 'PRECT':
-        precc = get_data(dataset, 'PRECC')
-        precl = get_data(dataset, 'PRECL')
-        data = precc + precl
-        data.attrs = precc.attrs
-        data.attrs['long_name'] = 'Total precipitation rate'
+        if 'PRECC' in dataset and 'PRECL' in dataset:
+            precc = get_data(dataset, 'PRECC')
+            precl = get_data(dataset, 'PRECL')
+            data = precc + precl
+            data.attrs = precc.attrs
+            data.attrs['long_name'] = 'Total precipitation rate'
+        elif 'mtpr' in dataset:
+            data = get_data(dataset, 'mtpr')
+            # Convert units from kg m^-2 s^-1 to mm/day
+            density = 1.0e3 # kg / m^3
+            data.values = data.values / density * 1e3 * 60 * 60 * 24
+            data.name = 'PRECT'
+            data.attrs['long_name'] = 'Total precipitation rate'
+            data.attrs['units'] = 'mm/day'
     elif field == 'TGCLDWP':
         clwp = get_data(dataset, 'TGCLDLWP')
         ciwp = get_data(dataset, 'TGCLDIWP')
@@ -320,6 +329,10 @@ def get_data(dataset, field):
             data.attrs = attrs
             data.attrs['units'] = 'K/day'
         
+    # Adjust long_name if necessary
+    if field == 'PRECT':
+        data.attrs['long_name'] = 'Total precipitation rate'
+
     return data
 
 

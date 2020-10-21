@@ -11,11 +11,11 @@ from e3smplot.mpl import compare_time_series, compare_zonal_means
 
 # List of fields we want to make map plots for
 map_vars = (
-    'FSNTOA',
+    #'FSNTOA',
     #'FSNTOAC',
     #'FLNT',
     #'FLNTC',
-    #'PRECT',
+    'PRECT',
     #'CLDTOT',
     #'SHFLX',
     #'TREFHT',
@@ -37,7 +37,7 @@ obs_sources = {
     'FSNTOAC': 'CERES-SYN',
     'FLNT'   : 'CERES-SYN',
     'FLNTC'  : 'CERES-SYN',
-    'PRECT'  : 'GPM',
+    'PRECT'  : 'ERA5',
     'CLDTOT' : 'CERES-SYN',
     'TMQ'    : 'ERA5',
     'SHFLX'  : 'ERA5',
@@ -64,7 +64,7 @@ obs_data_prefix = {
     'FSNTOAC': '',
     'FLNT'   : '',
     'FLNTC'  : '',
-    'PRECT'  : '',
+    'PRECT'  : 'ERA5_surf',
     'CLDTOT' : '',
     'SHFLX': 'ERA5_surf',
     'TREFHT': 'ERA5_surf',
