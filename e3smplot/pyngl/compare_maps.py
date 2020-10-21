@@ -10,6 +10,7 @@ from .plot_map import plot_map
 from ..e3sm_utils import get_data, area_average, regrid_data, get_coords, get_area_weights
 from ..utils import nice_cntr_levels, apply_map
 import cftime
+import subprocess
 
 
 def convert_time(ds):
@@ -223,6 +224,10 @@ def main(test_files, cntl_files, varname, plotname,
     ngl.panel(wks, plots, [1, len(plots)])
     print('done.')
 
+    # Finally, trim whitespace from our figures
+    print('Trimming whitespace from figure...', end=''); sys.stdout.flush()
+    subprocess.call(f'convert -trim {plotname} {plotname}'.split(' '))
+    print('done.')
 
 if __name__ == '__main__':
     import plac; plac.call(main)

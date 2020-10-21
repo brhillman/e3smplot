@@ -2,6 +2,9 @@
 
 import numpy
 import xarray
+import os, os.path
+import subprocess
+import sys.stdout
 
 def get_pressure(dataset, interfaces=False):
     if interfaces:
@@ -336,6 +339,108 @@ def get_data(dataset, field):
     return data
 
 
+def get_grid_name(f, **kwargs):
+
+    # This is maybe...a little hacky and fragile. Determine grid based on number
+    # of columns in the dataset. For well-annotated netcdf files, we could grab
+    # this info from global attributes I think. For example, for EAM output, we
+    # have a "ne" and a "fv_nphys" attribute in the global metadata we could
+    # grab. But this works for now.
+    grid_ncol_dict = {
+         384:      'ne4pg2',
+         21600:    'ne30pg2',
+         345600:   'ne120pg2',
+         1572864:  'ne256pg2',
+         25165824: 'ne1024pg2',
+    }
+
+    # Open file to inspect grid
+    with xarray.open_mfdataset(f, **kwargs) as ds:
+
+        # Look for dims
+        grid = None
+        if 'ncol' in ds.dims: 
+            grid = grid_ncol_dict[ds.sizes['ncol']]
+        else:
+            for (x, y) in zip(('lon', 'longitude'), ('lat', 'latitude')):
+                if x in ds.dims and y in ds.dims:
+                    grid = '{}x{}'.format(ds.sizes[y], ds.sizes[x])
+
+        # Check to make sure we found a grid
+        if grid is None: raise ValueError('No valid grid found.')
+
+    return grid
+
+
+def check_ret(p):
+    if p.returncode is not 0:
+        raise RuntimeError(f'Subprocess command failed: {}'.format(' '.join([str(s) for s in p.args])))
+
+
+def get_scrip_grid(data_file, grid_root):
+
+    grid_name = get_grid_name(data_file)
+    grid_file = f'{grid_root}/{grid_name}_scrip.nc'
+    if not os.path.exists(grid_file):
+        print(f'Grid {grid_file} not found, trying to create...', end=''); sys.stdout.flush()
+        os.makedirs(grid_root, exist_ok=True)
+        # For pg2 grids, we can create the grid file manually
+        phys_grids = ('ne4pg2', 'ne30pg2', 'ne120pg2', 'ne256pg2', 'ne1024pg2')
+        if grid_name in phys_grids:
+            # infer ne and pg
+            grid_ne, grid_pg = grid_name.split('ne')[1].split('pg')
+            # Generate exodus element file
+            check_ret(subprocess.run(f'GenerateCSMesh --alt --res {grid_ne} --file {grid_root}/ne{grid_ne}.g'.split(' ')))
+            # Generate pg2 grid file
+            check_ret(subprocess.run(f'GenerateVolumetricMesh --in {grid_root}/ne{grid_ne}.g --out {grid_root}/ne{grid_ne}pg{grid_pg}.g --np {grid_pg} --uniform'.split(' ')))
+            # Convert exodus to scrip
+            check_ret(subprocess.run(f'ConvertExodusToSCRIP --in {grid_root}/ne{grid_ne}pg{grid_pg}.g --out {grid_file}'.split(' ')))
+        else:
+            # Infer grid from coordinate data
+            check_ret(subprocess.run(f'ncks --rgr infer --rgr scrip={grid_file} {data_file} {grid_root}/foo.nc'.split(' ')))
+        print('done.'); sys.stdout.flush()
+
+    return grid_file
+
+
+def create_scrip_grid(x, y, grid_root):
+    '''
+    Create a new SCRIP-formatted grid file given lon/lat coordinates. This is to
+    be used for mapping unstructured data to a lon/lat grid for easier analysis.
+    '''
+
+    # Construct name for scrip grid
+    nx = len(x)
+    ny = len(y)
+    grid_file = f'{grid_root}/{ny}x{nx}_scrip.nc'
+
+    # Create scrip grid using nco
+    check_ret(f'ncremap -G ttl=\'Equi-Angular grid {ny}x{nx}\'#latlon={ny},{nx}#lat_typ=uni#lon_typ=grn_ctr -g {grid_file}')
+
+    return grid_file
+
+
+def get_mapping_file(source_file, target_file, mapping_root, method='nco'):
+
+    # Open files and get grids
+    source_grid = get_grid_name(source_file)
+    target_grid = get_grid_name(target_file)
+
+    # Check if we have a mapping file from cntl to test grid. If not, we will create one.
+    map_file = f'{mapping_root}/map_{target_grid}_to_{source_grid}_{method}.nc'
+    if os.path.exists(map_file):
+        print('Mapping file exists!')
+    else:
+        print('Mapping file does NOT exist; need to create...')
+        source_grid_file = get_scrip_grid(source_file, mapping_root)
+        target_grid_file = get_scrip_grid(target_file, mapping_root)
+        print(f'Creating mapping file {map_file}...', end=''); sys.stdout.flush()
+        check_ret(subprocess.run(f'ncremap --fl_fmt=64bit_data --alg_typ={method} --src_grd={source_grid_file} --dst_grd={target_grid_file} -m {map_file}'.split(' ')))
+        print('done.'); sys.stdout.flush()
+
+    return map_file
+
+
 def get_coords(ds_data, ds_grid=None):
     if ds_grid is not None:
         if 'lon' in ds_grid and 'lat' in ds_grid:
@@ -359,61 +464,6 @@ def get_area_weights(ds):
     else:
         wgt = numpy.cos(ds.lat * numpy.pi / 180.0)
     return wgt
-
-
-def read_files(*files, fix_time=False, year_offset=None, **kwargs):
-    # read files without decoding timestamps, because control dates are
-    # probably outside pandas valid range
-    from xarray import open_mfdataset
-    ds = open_mfdataset(*files, decode_times=False, autoclose=True, **kwargs)
-
-    # fix time_bnds
-    if fix_time and 'time_bnds' in ds.variables.keys():
-        ds['time_bnds'].attrs['units'] = ds['time'].attrs['units']
-
-        # for monthly averages, the time is defined as the *end* of the
-        # averaging interval...i.e., for the 0001-01 monthly mean, the time
-        # coordinate has a value of 0001-02-01 00:00:00. This is inconvenient
-        # because if we want to select all the January means to then do 
-        # something like calculate a climatology, we would need to offset these
-        # time values to get the month that the averaging is actually over.
-        # As a work-around, we can redefine the time coordinate values to be the
-        # average of the time_bnds variable.
-        #ds['time_bnds'].attrs['units'] = ds['time'].attrs['units']
-        bnd_dim = list(set(ds['time_bnds'].dims) - set(('time',)))
-        attrs = ds['time'].attrs
-        ds['time'] = ds['time_bnds'].astype('int64').mean(bnd_dim).astype('datetime64[ns]')
-        ds['time'].attrs = attrs
-        
-    # manually decode the times
-    from xarray import decode_cf
-    if year_offset is not None:
-        # Add an artificial offset to the time coordinate to handle cases where
-        # the time units are out of bounds. This is needed for, e.g., F-compset
-        # simulations that set the initial year as 0001.
-        # as a hackish solution, we can just adjust the units of the time
-        # axis...first, find the current base year
-        time_units = ds['time'].attrs['units'] 
-        base_year_idx = time_units.index('since ') + 6
-        year = int(time_units[base_year_idx:base_year_idx+4])
-
-        # add specified offset to base year
-        new_year = year + year_offset
-        new_units = time_units.replace(
-            'since %04i'%year, 'since %04i'%new_year
-        )
-
-        # update the time attributes
-        ds['time'].attrs['units'] = new_units
-        ds['time_bnds'].attrs['units'] = new_units
-        ds['time'].attrs['units_note'] = 'added a %i year offset to units to allow decoding with pandas'%year_offset
-     
-            
-    # Finally, decode the dataset
-    ds = decode_cf(ds)
-        
-    # update our dataset with the fixed up dataset read in by this method
-    return ds
 
 
 def area_average(data, weights, dims=None):
