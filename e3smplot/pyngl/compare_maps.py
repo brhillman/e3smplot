@@ -11,6 +11,7 @@ from ..e3sm_utils import get_data, area_average, regrid_data, get_coords, get_ar
 from ..utils import nice_cntr_levels, apply_map
 import cftime
 import subprocess
+import datetime
 
 
 def convert_time(ds):
@@ -28,13 +29,12 @@ def convert_time(ds):
 def subset_time(datasets):
 
     # Subset based on date range of first dataset
-    t1, t2 = datasets[0].time[0].values, datasets[0].time[-1].values
-    for i in range(1, len(datasets)):
-        datasets[i] = datasets[i].sel(time=slice(str(t1), str(t2)))
+    t1 = max([ds.time[0].values for ds in datasets])
+    t2 = min([ds.time[-1].values for ds in datasets])
+    datasets = [ds.sel(time=slice(str(t1), str(t2))) for ds in datasets]
     return datasets
 
 
-#def regrid(ds1, ds2, vname, method='nco'):
 def compute_differences(da1, da2, x1, y1, x2, y2, map_file=None):
 
     # If coordinates are not the same, then we need to regrid
@@ -50,17 +50,8 @@ def compute_differences(da1, da2, x1, y1, x2, y2, map_file=None):
             da1 = regrid_data(x1, y1, x2, y2, da1)
         else:
             # apply map
-            if True:
-                da1 = apply_map(da1, map_file, template=da2)
-            else:
-                ds_map = xarray.open_dataset(map_file)
-                weights = scipy.sparse.coo_matrix((ds_map['S'].values, (ds_map['row'].values-1, ds_map['col'].values-1)))
-                da1_regrid = weights.dot(da1)
-                da1_regrid = xarray.DataArray(
-                    da1_regrid.reshape(da2.shape), dims=da2.dims, coords=da2.coords,
-                    attrs=da1.attrs
-                )
-                da1 = da1_regrid
+            with xarray.open_mfdataset(map_file) as ds_map:
+                da1, *__ = apply_map(da1, ds_map, template=da2)
 
     # Now compute difference
     da_diff = da1 - da2
@@ -127,11 +118,15 @@ def plot_panel(wks, data, x, y, **kwargs):
     return pl
 
 
-def open_dataset(files, **kwargs):
+def open_dataset(files, time_offset=None, **kwargs):
     # Open dataset as a dask array
     with dask.config.set(**{'array.slicing.split_large_chunks': True}):
         ds = xarray.open_mfdataset(
             sorted(files), combine='by_coords', drop_variables=('P3_output_dim', 'P3_input_dim'), **kwargs) 
+
+    if time_offset is not None:
+        print('Adding year offset...')
+        ds['time'] = ds['time'] + time_offset
 
     # Rename coordinate variables
     if 'latitude' in ds.dims: ds = ds.rename({'latitude': 'lat'})
@@ -164,12 +159,13 @@ def get_contour_levels(data_arrays, percentile=2, **kwargs):
 
 
 def main(test_files, cntl_files, varname, plotname, 
-        test_name="Model", cntl_name="Obs", map_file=None, test_grid=None,
+        test_name="Model", cntl_name="Obs", time_offsets=[None, None], map_file=None, test_grid=None,
         cntl_grid=None, **kwargs):
 
     # Read data
     print('Open datasets...', end=''); sys.stdout.flush()
-    datasets = [open_dataset(files) for files in (test_files, cntl_files)]
+    datasets = [open_dataset(files, time_offset) for files, time_offset in zip((test_files,
+        cntl_files), time_offsets)]
     grids = [xarray.open_mfdataset(f) if f is not None else None for f in (test_grid, cntl_grid)]
     print('done.')
 

@@ -1,6 +1,7 @@
 import numpy
 import xarray
 import scipy.sparse
+import sparse
 
 ################################################################
 # This function is one of two codes contributed by Lou Wicker
@@ -146,12 +147,44 @@ def nice_cntr_levels(lmin, lmax, outside=True, max_steps=15, cint=None, returnLe
         
 
 def apply_map(da, map_file, template=None):
-    ds_map = xarray.open_dataset(map_file)
+
+    # Allow for passing either a mapping file name or a xarray.Dataset
+    if isinstance(map_file, xarray.Dataset):
+        ds_map = map_file
+    else:
+        ds_map = xarray.open_mfdataset(map_file)
+
+    # Do the remapping
     weights = scipy.sparse.coo_matrix((ds_map['S'].values, (ds_map['row'].values-1, ds_map['col'].values-1)))
-    da_regrid = weights.dot(da)
+    da_regrid = weights.dot(da.data)
+
+    # Figure out coordinate variables and whether or not we should reshape the
+    # output before returning
     if isinstance(template, xarray.DataArray):
         da_regrid = xarray.DataArray(
             da_regrid.reshape(template.shape), dims=template.dims, coords=template.coords,
             attrs=da.attrs
         )
-    return da_regrid
+        x = da_regrid.lon
+        y = da_regrid.lat
+    elif len(ds_map.dst_grid_dims) == 2:
+        # Get lon and lat coordinates from mapping file
+        x = ds_map.xc_b.values.reshape(ds_map.dst_grid_dims.values[::-1])[0,:]
+        y = ds_map.yc_b.values.reshape(ds_map.dst_grid_dims.values[::-1])[:,0]
+
+        # Reshape to expected output
+        da_regrid = xarray.DataArray(
+            da_regrid.reshape(ds_map.dst_grid_dims.values[::-1]),
+            dims=('lat', 'lon'),
+            coords={'lat': y, 'lon': x},
+            attrs=da.attrs,
+        )
+    else:
+        x = ds_map.xc_b
+        y = ds_map.yc_b
+
+    # Return remapped array and coordinate variables
+    return da_regrid, x, y
+
+
+
