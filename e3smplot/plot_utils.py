@@ -567,58 +567,6 @@ def compare_timeseries_2d(data_arrays, cases, **kwargs):
     return figure
 
 
-def calculate_zonal_mean(data, weights, old_lat, lat_edges=None):
-    
-    import numpy as numpy
-    
-    # Mask data weights
-    weights = weights.where(data.notnull())
-    
-    # Calculate new latitudes
-    if lat_edges is None:
-        lat_edges = numpy.linspace(-90, 90, 31)
-        
-    # Calculating zonal mean for each latitude by binning data according to lat values
-    lat_centers = numpy.zeros(len(lat_edges) - 1)
-    if 'lev' in data.dims:
-        data_zonal = numpy.zeros([len(lat_edges) - 1, len(data['lev'])])
-    else:
-        data_zonal = numpy.zeros(len(lat_edges) - 1)
-    for ilat in range(len(lat_edges) - 1):
-        
-        # Find latitude bounds
-        lat1 = lat_edges[ilat]
-        lat2 = lat_edges[ilat+1]
-        
-        # Calculate latitude centers from bounds
-        lat_centers[ilat] = (lat_edges[ilat+1] + lat_edges[ilat]) / 2.0
-
-        # Calculate mean for this latitude band
-        data_band = data.where(old_lat > lat1).where(old_lat <= lat2)
-        weights_band = weights.where(old_lat > lat1).where(old_lat <= lat2)
-        data_zonal[ilat, ...] = (weights_band * data_band).sum(dim='ncol') / weights_band.sum(dim='ncol')
-        
-    # Turn these into DataArrays
-    from xarray import DataArray
-    lat_centers = DataArray(
-        lat_centers,
-        dims=('lat',),
-        attrs={'long_name': 'Latitude', 'units': 'Degrees north'}
-    )
-    if 'lev' in data.dims:
-        dims = ('lat', 'lev')
-        coords = {'lat': lat_centers, 'lev': data.lev}
-    else:
-        dims = ('lat')
-        coords = {'lat': lat_centers}
-
-    data_zonal = DataArray(
-        data_zonal,
-        dims=dims, coords=coords, attrs=data.attrs
-    )
-    return data_zonal, lat_centers
-
-
 def compare_zonal_means(datasets, field, labels=None, plot_diffs=False, **kwargs):
 
     figure = pyplot.figure()
