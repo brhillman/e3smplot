@@ -94,9 +94,6 @@ def main(test_files, cntl_files, vname, fig_name, test_map=None, cntl_map=None,
     means = [da.mean(dim='time', keep_attrs=True) for da in data_arrays]
     weights = [wgt.mean(dim='time', keep_attrs=True) if 'time' in wgt.dims else wgt for wgt in weights]
 
-    for m in means:
-        print(m.shape)
-
     # Remap data to a lat/lon grid to compute zonal means. 
     print('Remap to lat/lon grid if needed...'); sys.stdout.flush()
     with dask.config.set(**{'array.slicing.split_large_chunks': True}):
@@ -108,9 +105,6 @@ def main(test_files, cntl_files, vname, fig_name, test_map=None, cntl_map=None,
     print('Get lat...'); sys.stdout.flush()
     lats = [m.lat for m in means]
     print('done.')
-
-    for m in means:
-        print(m.shape)
 
     # Compute *zonal* average. Note that this is tricky for unstructured data.
     # Our approach is to compute means over latitude bins, and return a new
