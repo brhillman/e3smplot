@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 import numpy
-import xarray
+import xarray, xarray.ufuncs
 import os, os.path
 import subprocess
-import sys.stdout
+import sys
 
 def get_pressure(dataset, interfaces=False):
     if interfaces:
@@ -339,7 +339,7 @@ def get_data(dataset, field):
     return data
 
 
-def get_grid_name(f, **kwargs):
+def get_grid_name(ds, **kwargs):
 
     # This is maybe...a little hacky and fragile. Determine grid based on number
     # of columns in the dataset. For well-annotated netcdf files, we could grab
@@ -354,32 +354,71 @@ def get_grid_name(f, **kwargs):
          25165824: 'ne1024pg2',
     }
 
-    # Open file to inspect grid
-    with xarray.open_mfdataset(f, **kwargs) as ds:
+    # Look for dims
+    grid = None
+    if 'ncol' in ds.dims: 
+        grid = grid_ncol_dict[ds.sizes['ncol']]
+    elif 'grid_dims' in ds:
+        print(ds.grid_dims)
+        if len(ds.grid_dims) == 2:
+            grid = f'{ds.grid_dims[1]}x{ds.grid_dims[0]}'
+    else:
+        for (x, y) in zip(('lon', 'longitude'), ('lat', 'latitude')):
+            if x in ds.dims and y in ds.dims:
+                grid = '{}x{}'.format(ds.sizes[y], ds.sizes[x])
 
-        # Look for dims
-        grid = None
-        if 'ncol' in ds.dims: 
-            grid = grid_ncol_dict[ds.sizes['ncol']]
-        else:
-            for (x, y) in zip(('lon', 'longitude'), ('lat', 'latitude')):
-                if x in ds.dims and y in ds.dims:
-                    grid = '{}x{}'.format(ds.sizes[y], ds.sizes[x])
-
-        # Check to make sure we found a grid
-        if grid is None: raise ValueError('No valid grid found.')
+    # Check to make sure we found a grid
+    if grid is None: raise ValueError('No valid grid found.')
 
     return grid
 
 
 def check_ret(p):
-    if p.returncode is not 0:
-        raise RuntimeError(f'Subprocess command failed: {}'.format(' '.join([str(s) for s in p.args])))
+    if p.returncode != 0:
+        raise RuntimeError('Subprocess command failed: {}'.format(' '.join([str(s) for s in p.args])))
+
+
+def get_scrip_grid_ds(ds, grid_root):
+    grid_name = get_grid_name(ds)
+    grid_file = f'{grid_root}/{grid_name}_scrip.nc'
+    if not os.path.exists(grid_file):
+        print(f'Grid {grid_file} not found, trying to create...', end=''); sys.stdout.flush()
+        os.makedirs(grid_root, exist_ok=True)
+        # For pg2 grids, we can create the grid file manually
+        phys_grids = ('ne4pg2', 'ne30pg2', 'ne120pg2', 'ne256pg2', 'ne1024pg2')
+        if grid_name in phys_grids:
+            # infer ne and pg
+            grid_ne, grid_pg = grid_name.split('ne')[1].split('pg')
+            # Generate exodus element file
+            check_ret(subprocess.run(f'GenerateCSMesh --alt --res {grid_ne} --file {grid_root}/ne{grid_ne}.g'.split(' ')))
+            # Generate pg2 grid file
+            check_ret(subprocess.run(f'GenerateVolumetricMesh --in {grid_root}/ne{grid_ne}.g --out {grid_root}/ne{grid_ne}pg{grid_pg}.g --np {grid_pg} --uniform'.split(' ')))
+            # Convert exodus to scrip
+            check_ret(subprocess.run(f'ConvertExodusToSCRIP --in {grid_root}/ne{grid_ne}pg{grid_pg}.g --out {grid_file}'.split(' ')))
+        else:
+            # Infer grid from coordinate data; use ncks to do this, so first we
+            # need to write out the coordinate data to a temporary file
+            tmp_file = None
+            for (x, y) in zip(('lon', 'longitude', 'x'), ('lat', 'latitude', 'y')):
+                if x in ds and y in ds:
+                    tmp_file = f'{grid_root}/{ds.size[y]}x{ds.size[x]}_latlon.nc'
+                    xarray.Dataset({x: ds[x], y: ds[y]}).to_netcdf(tmp_file)
+            if tmp_file is not None:
+                try:
+                    os.remove(f'{grid_root}/foo.nc')
+                except:
+                    pass
+                check_ret(subprocess.run(f'ncks --rgr infer --rgr scrip={grid_file} {tmp_file} {grid_root}/foo.nc'.split(' ')))
+            else:
+                raise RuntimeError('Failed to generate a coordinate file.')
+        print('done.'); sys.stdout.flush()
+
+    return grid_file
 
 
 def get_scrip_grid(data_file, grid_root):
 
-    grid_name = get_grid_name(data_file)
+    with xarray.open_dataset(data_file) as ds: grid_name = get_grid_name(ds)
     grid_file = f'{grid_root}/{grid_name}_scrip.nc'
     if not os.path.exists(grid_file):
         print(f'Grid {grid_file} not found, trying to create...', end=''); sys.stdout.flush()
@@ -415,7 +454,9 @@ def create_scrip_grid(x, y, grid_root):
     grid_file = f'{grid_root}/{ny}x{nx}_scrip.nc'
 
     # Create scrip grid using nco
-    check_ret(f'ncremap -G ttl=\'Equi-Angular grid {ny}x{nx}\'#latlon={ny},{nx}#lat_typ=uni#lon_typ=grn_ctr -g {grid_file}')
+    command = 'ncremap -G ttl=\'Equi-Angular_grid_{ny}x{nx}\'#latlon={ny},{nx}#lat_typ=uni#lon_typ=grn_ctr -g {grid_file}'.split(' ')
+    print(command)
+    check_ret(subprocess.run(f'ncremap -G ttl=\'Equi-Angular_grid_{ny}x{nx}\'#latlon={ny},{nx}#lat_typ=uni#lon_typ=grn_ctr -g {grid_file}'.split(' ')))
 
     return grid_file
 
@@ -423,18 +464,17 @@ def create_scrip_grid(x, y, grid_root):
 def get_mapping_file(source_file, target_file, mapping_root, method='nco'):
 
     # Open files and get grids
-    source_grid = get_grid_name(source_file)
-    target_grid = get_grid_name(target_file)
+    with xarray.open_dataset(source_file) as ds: source_grid = get_grid_name(ds)
+    with xarray.open_dataset(target_file) as ds: target_grid = get_grid_name(ds)
 
     # Check if we have a mapping file from cntl to test grid. If not, we will create one.
-    map_file = f'{mapping_root}/map_{target_grid}_to_{source_grid}_{method}.nc'
+    map_file = f'{mapping_root}/map_{source_grid}_to_{target_grid}_{method}.nc'
     if os.path.exists(map_file):
         print('Mapping file exists!')
     else:
-        print('Mapping file does NOT exist; need to create...')
+        print(f'Creating mapping file {map_file}...'); sys.stdout.flush()
         source_grid_file = get_scrip_grid(source_file, mapping_root)
         target_grid_file = get_scrip_grid(target_file, mapping_root)
-        print(f'Creating mapping file {map_file}...', end=''); sys.stdout.flush()
         check_ret(subprocess.run(f'ncremap --fl_fmt=64bit_data --alg_typ={method} --src_grd={source_grid_file} --dst_grd={target_grid_file} -m {map_file}'.split(' ')))
         print('done.'); sys.stdout.flush()
 
@@ -462,7 +502,8 @@ def get_area_weights(ds):
     if 'area' in ds.variables.keys():
         wgt = ds.area
     else:
-        wgt = numpy.cos(ds.lat * numpy.pi / 180.0)
+        # Use xarray.ufuncs to work on lazily evaluated dask arrays
+        wgt = xarray.ufuncs.cos(ds.lat * numpy.pi / 180.0)
     return wgt
 
 
