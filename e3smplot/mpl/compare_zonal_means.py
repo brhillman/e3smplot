@@ -1,23 +1,17 @@
 #!/usr/bin/env python3
 import xarray
 import numpy
+import dask
 from glob import glob
-from ..e3sm_utils import get_data, get_coords, get_area_weights, area_average, calculate_zonal_mean
+from ..e3sm_utils import get_data, get_coords, get_area_weights, area_average, calculate_zonal_mean, get_grid_name, get_mapping_file, get_scrip_grid_ds, create_scrip_grid
 from matplotlib import pyplot
 import cftime
 from ..utils import apply_map
+import sys
+import subprocess
 
 
-def open_dataset(files, **kwargs):
-    # Open dataset as a dask array
-    ds = xarray.open_mfdataset(sorted(files), combine='by_coords', drop_variables='P3_output_dim', **kwargs) 
-
-    # Rename coordinate variables
-    if 'latitude' in ds.dims: ds = ds.rename({'latitude': 'lat'})
-    if 'longitude' in ds.dims: ds = ds.rename({'longitude': 'lon'})
-
-    if 'msshf' in ds.variables.keys():
-        ds['msshf'].values = -ds['msshf'].values
+def convert_time(ds):
 
     # Convert cftime coordinate
     if isinstance(ds.time.values[0], cftime._cftime.DatetimeNoLeap):
@@ -26,6 +20,29 @@ def open_dataset(files, **kwargs):
         except:
             print('Could not convert times to datetimeindex. But proceeding anyway...')
 
+    return ds
+
+
+def open_dataset(files, time_offset=None, **kwargs):
+    # Open dataset as a dask array
+    with dask.config.set(**{'array.slicing.split_large_chunks': True}):
+        ds = xarray.open_mfdataset(
+            sorted(files), combine='by_coords', drop_variables=('P3_output_dim', 'P3_input_dim'), **kwargs) 
+
+    if time_offset is not None:
+        print('Adding year offset...')
+        ds['time'] = ds['time'] + time_offset
+
+    # Rename coordinate variables
+    if 'latitude' in ds.dims: ds = ds.rename({'latitude': 'lat'})
+    if 'longitude' in ds.dims: ds = ds.rename({'longitude': 'lon'})
+
+    if 'msshf' in ds.variables.keys():
+        ds['msshf'].values = -ds['msshf'].values
+
+    # Fix times so we can subset later
+    ds = convert_time(ds)
+
     # Return dataset
     return ds
 
@@ -33,8 +50,8 @@ def open_dataset(files, **kwargs):
 def plot_zonal_mean(lat, data, **kwargs):
     ax = pyplot.gca()
     pl = ax.plot(lat, data, **kwargs)
-    ax.set_xlabel(f'{data.long_name} ({data.units})')
-    ax.set_ylabel('Latitude')
+    ax.set_xlabel('Latitude')
+    ax.set_ylabel(f'{data.long_name} ({data.units})')
     return pl
 
 
@@ -52,42 +69,48 @@ def zonal_mean(data, weights=None):
     return zonal_mean
 
 
-def to_latlon(data, x, y):
-
-    if len(data.shape) == 1:
-        # Data is unstructured, we need to remap
-        
-    else:
-        return data, x, y
-
-
-def main(test_files, cntl_files, vname, fig_name, map_file=None, test_name='Model', cntl_name='Obs', **kwargs):
+def main(test_files, cntl_files, vname, fig_name, test_map=None, cntl_map=None,
+        time_offsets=(None, None), test_name='Model', cntl_name='Obs', **kwargs):
 
     # Load datasets
-    datasets = [open_dataset(f) for f in (test_files, cntl_files)]
+    print('Load data...'); sys.stdout.flush()
+    with dask.config.set(**{'array.slicing.split_large_chunks': True}):
+        datasets = [open_dataset(f, time_offset=dt, chunks={'time': 1}) for (f, dt) in zip((test_files, cntl_files), time_offsets)]
 
     # Subset for overlapping time periods
+    print('Get overlapping time range...'); sys.stdout.flush()
     t1 = max([ds.time[0].values for ds in datasets])
     t2 = min([ds.time[-1].values for ds in datasets])
     datasets = [ds.sel(time=slice(str(t1), str(t2))) for ds in datasets]
-    #t1, t2 = datasets[0].time[0].values, datasets[0].time[-1].values
-    #datasets = [ds.sel(time=slice(str(t1), str(t2))) for ds in datasets]
-    #t1, t2 = datasets[1].time[0].values, datasets[1].time[-1].values
-    #datasets = [ds.sel(time=slice(str(t1), str(t2))) for ds in datasets]
 
     # Select data
+    print('Select data...'); sys.stdout.flush()
     data_arrays = [get_data(ds, vname) for ds in datasets]
     coords = [get_coords(ds) for ds in datasets]
     weights = [get_area_weights(ds) for ds in datasets]
 
     # Compute time averages
+    print('Compute time averages...'); sys.stdout.flush()
     means = [da.mean(dim='time', keep_attrs=True) for da in data_arrays]
     weights = [wgt.mean(dim='time', keep_attrs=True) if 'time' in wgt.dims else wgt for wgt in weights]
-    lats = [c[1].mean(dim='time', keep_attrs=True) if 'time' in c[1].dims else c[1] for c in coords]
+
+    for m in means:
+        print(m.shape)
 
     # Remap data to a lat/lon grid to compute zonal means. 
-    #means, lats = [to_latlon(m, coords) for (m, coords) in zip(means, lats)] 
-    #weights, lats = [to_latlon(m, coords) for (m, coords) in zip(weights, lats)] 
+    print('Remap to lat/lon grid if needed...'); sys.stdout.flush()
+    with dask.config.set(**{'array.slicing.split_large_chunks': True}):
+        maps = [xarray.open_mfdataset(f) if f is not None else None for f in (test_map, cntl_map)]
+    print('Remap weights...'); sys.stdout.flush()
+    weights, lons, lats = zip(*[apply_map(m, f) if f is not None else m for (m, f) in zip(weights, maps)])
+    print('Remap means...'); sys.stdout.flush()
+    means, lons, lats = zip(*[apply_map(m, f) if f is not None else (m, m.lon, m.lat) for (m, f) in zip(means, maps)])
+    print('Get lat...'); sys.stdout.flush()
+    lats = [m.lat for m in means]
+    print('done.')
+
+    for m in means:
+        print(m.shape)
 
     # Compute *zonal* average. Note that this is tricky for unstructured data.
     # Our approach is to compute means over latitude bins, and return a new
@@ -96,22 +119,33 @@ def main(test_files, cntl_files, vname, fig_name, map_file=None, test_name='Mode
     # latitudes, and optionally the number of new latitude bands within which to
     # average the data, and returns the binned/averaged data and the new
     # latitudes.
-    if map_file is not None:
-        print('Apply map...')
-        means[0] = apply_map(means[0], map_file, template=means[1])
-        weights[0] = apply_map(weights[0], map_file, template=means[1])
-        lats[0] = lats[1]
-        weights, *__ = zip(*[xarray.broadcast(w, d) for (w, d) in zip(weights, means)])
-        means = [zonal_mean(d, weights=w) for (d, w) in zip(means, weights)]
-    else:
-        print('Try using our slow zonal mean routine...')
-        means, lats = zip(*[calculate_zonal_mean(d, w, y) for (d, w, y) in zip(means, weights, lats)])
+    #if map_file is not None:
+    #    print('Apply map...')
+    #    means[0] = apply_map(means[0], map_file, template=means[1])
+    #    weights[0] = apply_map(weights[0], map_file, template=means[1])
+    #    lats[0] = lats[1]
+    #    weights, *__ = zip(*[xarray.broadcast(w, d) for (w, d) in zip(weights, means)])
+    #    means = [zonal_mean(d, weights=w) for (d, w) in zip(means, weights)]
+    #else:
+    #    print('Try using our slow zonal mean routine...')
+    #    means, lats = zip(*[calculate_zonal_mean(d, w, y) for (d, w, y) in zip(means, weights, lats)])
+    print('Compute zonal means...', end=''); sys.stdout.flush()
+    weights, *__ = zip(*[xarray.broadcast(w, d) for (w, d) in zip(weights, means)])
+    means = [zonal_mean(d, weights=w) for (d, w) in zip(means, weights)]
+    print('done.')
 
-    # Make line plots of area averages
+    # Make line plots of zonal averages
+    print('Make line plots of zonal means...', end=''); sys.stdout.flush()
     figure, ax = pyplot.subplots(1, 1)
     plots = [plot_zonal_mean(y, m, label=l, **kwargs) for (y, m, l) in zip(lats, means, (test_name, cntl_name))]
     pyplot.legend()
     figure.savefig(fig_name, bbox_inches='tight')
+    print('done.')
+
+    # Finally, trim whitespace from our figures
+    print('Trimming whitespace from figure...', end=''); sys.stdout.flush()
+    subprocess.call(f'convert -trim {fig_name} {fig_name}'.split(' '))
+    print('done.')
 
 
 if __name__ == '__main__':
