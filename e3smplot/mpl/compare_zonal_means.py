@@ -3,7 +3,8 @@ import xarray
 import numpy
 import dask
 from glob import glob
-from ..e3sm_utils import get_data, get_coords, get_area_weights, area_average, calculate_zonal_mean, get_grid_name, get_mapping_file, get_scrip_grid_ds, create_scrip_grid
+from ..e3sm_utils import get_data, get_coords, get_area_weights, area_average, calculate_zonal_mean
+from ..e3sm_utils import get_grid_name, get_mapping_file, get_scrip_grid_ds, create_scrip_grid, mask_all_zero
 from matplotlib import pyplot
 import cftime
 from ..utils import apply_map
@@ -89,6 +90,10 @@ def main(test_files, cntl_files, vname, fig_name, test_map=None, cntl_map=None,
     coords = [get_coords(ds) for ds in datasets]
     weights = [get_area_weights(ds) for ds in datasets]
 
+    # Fix missing values
+    print('Remask all-zero times...'); sys.stdout.flush()
+    data_arrays = [mask_all_zero(da) for da in data_arrays]
+
     # Compute time averages
     print('Compute time averages...'); sys.stdout.flush()
     means = [da.mean(dim='time', keep_attrs=True) for da in data_arrays]
@@ -123,23 +128,20 @@ def main(test_files, cntl_files, vname, fig_name, test_map=None, cntl_map=None,
     #else:
     #    print('Try using our slow zonal mean routine...')
     #    means, lats = zip(*[calculate_zonal_mean(d, w, y) for (d, w, y) in zip(means, weights, lats)])
-    print('Compute zonal means...', end=''); sys.stdout.flush()
+    print('Compute zonal means...'); sys.stdout.flush()
     weights, *__ = zip(*[xarray.broadcast(w, d) for (w, d) in zip(weights, means)])
     means = [zonal_mean(d, weights=w) for (d, w) in zip(means, weights)]
-    print('done.')
 
     # Make line plots of zonal averages
-    print('Make line plots of zonal means...', end=''); sys.stdout.flush()
+    print('Make line plots of zonal means...'); sys.stdout.flush()
     figure, ax = pyplot.subplots(1, 1)
     plots = [plot_zonal_mean(y, m, label=l, **kwargs) for (y, m, l) in zip(lats, means, (test_name, cntl_name))]
     pyplot.legend()
     figure.savefig(fig_name, bbox_inches='tight')
-    print('done.')
 
     # Finally, trim whitespace from our figures
-    print('Trimming whitespace from figure...', end=''); sys.stdout.flush()
+    print('Trimming whitespace from figure...'); sys.stdout.flush()
     subprocess.call(f'convert -trim {fig_name} {fig_name}'.split(' '))
-    print('done.')
 
 
 if __name__ == '__main__':

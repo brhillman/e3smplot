@@ -628,4 +628,10 @@ def calculate_zonal_mean(data, weights, old_lat, avg_dims=None, lat_edges=None, 
     return data_zonal, lat_centers
 
 
-
+def mask_all_zero(d, dims=None):
+    '''
+    Mask data where ALL samples are zero. This is meant to handle the case
+    where missing data was accidentally written as zeros instead of fillvalues.
+    '''
+    if dims is None: dims = list(set(d.dims) - set(['time',]))
+    return d.where(abs(d).sum(dim=dims, keep_attrs=True))

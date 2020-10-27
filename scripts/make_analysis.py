@@ -47,21 +47,21 @@ graphics_root = './graphics'
 # Flags to control what kind of plots to make. You probably want to make them
 # all, but being able to disable for testing is useful. Some of them take quite
 # a while to make.
-do_contour_maps = False
+do_contour_maps = True
 do_time_series = False
 do_zonal_means = True
 
 # List of fields we want to make map plots for
 variables = (
     'FSNTOA',
-    #'FSNTOAC',
-    #'FLNT',
-    #'FLNTC',
-    #'PRECT',
-    #'CLDTOT',
-    #'SHFLX',
-    #'TREFHT',
-    #'TMQ',
+    'FSNTOAC',
+    'FLNT',
+    'FLNTC',
+    'PRECT',
+    'CLDTOT',
+    'SHFLX',
+    'TREFHT',
+    'TMQ',
 )
 
 #

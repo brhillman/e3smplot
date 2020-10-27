@@ -7,7 +7,7 @@ import scipy, scipy.sparse
 import xarray
 import dask
 from .plot_map import plot_map
-from ..e3sm_utils import get_data, area_average, regrid_data, get_coords, get_area_weights
+from ..e3sm_utils import get_data, area_average, regrid_data, get_coords, get_area_weights, mask_all_zero
 from ..utils import nice_cntr_levels, apply_map
 import cftime
 import subprocess
@@ -163,48 +163,51 @@ def main(test_files, cntl_files, varname, plotname,
         cntl_grid=None, **kwargs):
 
     # Read data
-    print('Open datasets...', end=''); sys.stdout.flush()
+    print('Open datasets...'); sys.stdout.flush()
     datasets = [open_dataset(files, time_offset) for files, time_offset in zip((test_files,
         cntl_files), time_offsets)]
     grids = [xarray.open_mfdataset(f) if f is not None else None for f in (test_grid, cntl_grid)]
-    print('done.')
 
-    # Subset and time average
-    print('Subset...', end=''); sys.stdout.flush()
+    # Subset data
+    print('Subset consistent time periods...'); sys.stdout.flush()
     datasets = subset_time(datasets)
-    datasets = [ds.mean(dim='time', keep_attrs=True) for ds in datasets]
-    print('done.')
 
     # Select data
-    print('Select data...', end=''); sys.stdout.flush()
+    print('Select data...'); sys.stdout.flush()
     data_arrays = [get_data(ds, varname) for ds in datasets]
     coords = [get_coords(ds, ds_grid) for ds, ds_grid in zip(datasets, grids)]
     weights = [get_area_weights(ds) for ds in datasets]
-    print('done.')
+
+    # Fix missing values
+    print('Remask all-zero times...'); sys.stdout.flush()
+    data_arrays = [mask_all_zero(da) for da in data_arrays]
+
+    # Time average
+    print('Compute time averages...'); sys.stdout.flush()
+    data_arrays = [da.mean(dim='time', keep_attrs=True) for da in data_arrays]
+    coords = [[c.mean(dim='time', keep_attrs=True) for c in coord] if 'time' in
+            coord[0].dims else coord for coord in coords]
+    weights = [da.mean(dim='time', keep_attrs=True)  if 'time'
+            in da.dims else da for da in weights]
 
     # Compute differences
-    print('Compute differences...', end=''); sys.stdout.flush()
-    #datasets.append(compute_differences(datasets[0], datasets[1], varname, map_file))
+    print('Compute differences...'); sys.stdout.flush()
     data_arrays.append(compute_differences(data_arrays[0], data_arrays[1], *coords[0], *coords[1], map_file))
     coords.append(coords[1])
     weights.append(weights[1])
-    print('done.')
 
     # Compute global statistics for plot labels
-    print('Compute statistics...', end=''); sys.stdout.flush()
-    #means = [compute_area_average(ds, varname).values for ds in datasets]
+    print('Compute statistics...'); sys.stdout.flush()
     means = [area_average(d, w) for (d, w) in zip(data_arrays, weights)]
-    print('done.')
 
     # Get common contour levels
-    print('Find good clevels for plotting...', end=''); sys.stdout.flush()
+    print('Find good clevels for plotting...'); sys.stdout.flush()
     clevels = get_contour_levels([d for d in data_arrays[:-1]])
     dlevels = get_contour_levels([data_arrays[-1],], aboutZero=True)
     levels_list = [clevels, clevels, dlevels]
-    print('done.')
 
     # Make plots
-    print('Make plots...', end=''); sys.stdout.flush()
+    print('Make plots...'); sys.stdout.flush()
     plot_format = plotname.split('.')[-1]
     wks = ngl.open_wks(plot_format, plotname)
     diff_name = f'{test_name} minus {cntl_name}'
@@ -213,17 +216,14 @@ def main(test_files, cntl_files, varname, plotname,
         plot_panel(wks, d, *c, tiMainString=label, cnLevels=levels, **kwargs)
         for (d, c, label, levels) in zip(data_arrays, coords, labels, levels_list)
     ]
-    print('done.')
 
     # Panel plots
-    print('Closing plot workspace and writing figures...', end=''); sys.stdout.flush()
+    print('Closing plot workspace and writing figures...'); sys.stdout.flush()
     ngl.panel(wks, plots, [1, len(plots)])
-    print('done.')
 
     # Finally, trim whitespace from our figures
-    print('Trimming whitespace from figure...', end=''); sys.stdout.flush()
+    print('Trimming whitespace from figure...'); sys.stdout.flush()
     subprocess.call(f'convert -trim {plotname} {plotname}'.split(' '))
-    print('done.')
 
 if __name__ == '__main__':
     import plac; plac.call(main)
