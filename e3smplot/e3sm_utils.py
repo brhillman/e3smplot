@@ -351,8 +351,11 @@ def can_retrieve_field(f, v):
     '''
     result = False
     with xarray.open_mfdataset(f) as ds:
-        if get_data(ds, v) is not None:
+        try: 
+            d = get_data(ds, v)
             result = True
+        except:
+            result = False
     return result
 
 
