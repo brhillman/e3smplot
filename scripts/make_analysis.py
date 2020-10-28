@@ -27,8 +27,7 @@ test_case_name = 'ne256 rrtmgp'
 
 # Set control case names. We will compare the test_case_name against each of
 # these
-#cntl_case_names = ('ne256 rrtmg', 'CERES-SYN', 'ERA5')
-cntl_case_names = ('CERES-SYN', 'ERA5')
+cntl_case_names = ('ne256 rrtmg', 'CERES-SYN', 'ERA5')
 
 # Path were we can find netcdf files with output from the test/model case
 data_paths = {
@@ -93,24 +92,25 @@ graphics_root = './graphics'
 # Flags to control what kind of plots to make. You probably want to make them
 # all, but being able to disable for testing is useful. Some of them take quite
 # a while to make.
-do_contour_maps = False
-do_time_series = False
+do_contour_maps = True
+do_time_series = True
 do_zonal_means = True
 
 # Before we do anything, make sure our plot directory exists
 os.makedirs(graphics_root, exist_ok=True)
 
-for cntl_case_name in cntl_case_names:
-    for vname in variables:
+for vname in variables:
+    if do_contour_maps:
 
-        # Find files and make sure we can retrieve variable
-        if vname not in glob_strings[test_case_name] or vname not in glob_strings[cntl_case_name]: continue
-        test_files = sorted(glob(f'{data_paths[test_case_name]}/{glob_strings[test_case_name][vname]}'))
-        cntl_files = sorted(glob(f'{data_paths[cntl_case_name]}/{glob_strings[cntl_case_name][vname]}'))
-        if not can_retrieve_field(cntl_files[0], vname): continue
+        # For map plots we only compare two at a time so we can look at differences
+        for cntl_case_name in cntl_case_names:
 
-        print(f'Comparing {test_case_name} to {cntl_case_name}...')
-        if do_contour_maps:
+            # Find files and make sure we can retrieve variable
+            if vname not in glob_strings[test_case_name] or vname not in glob_strings[cntl_case_name]: continue
+            test_files = sorted(glob(f'{data_paths[test_case_name]}/{glob_strings[test_case_name][vname]}'))
+            cntl_files = sorted(glob(f'{data_paths[cntl_case_name]}/{glob_strings[cntl_case_name][vname]}'))
+            if not can_retrieve_field(cntl_files[0], vname): continue
+
 
             # Figure out what mapping files we need based on test and obs data
             if get_grid_name(test_files[0]) != get_grid_name(cntl_files[0]):
@@ -119,7 +119,7 @@ for cntl_case_name in cntl_case_names:
                 map_file = None
 
             # Compare maps
-            print(f'Making contour maps for {vname}...')
+            print(f'Making {test_case_name} vs {cntl_case_name} contour maps for {vname}...')
             figname = f'{graphics_root}/{vname}_{test_case_name.replace(" ", "_")}_vs_{cntl_case_name.replace(" ", "_")}.png'
             compare_maps.main(test_files, cntl_files, vname, figname,
                     test_name=test_case_name, cntl_name=cntl_case_name,
@@ -130,41 +130,46 @@ for cntl_case_name in cntl_case_names:
                     lbLabelFontHeightF=0.02,
                     )
 
-        # Make time series plots
-        if do_time_series:
+    # Make zonal mean plots
+    if do_zonal_means:
 
-            # Make time series plots
-            print(f'Making time series for {vname}...')
-            figname = f'{graphics_root}/{vname}_{test_case_name.replace(" ", "_")}_vs_{cntl_case_name.replace(" ", "_")}_timeseries.png'
-            compare_time_series.main(test_files, cntl_files, vname, figname,
-                    test_name=test_case_name, cntl_name=cntl_case_name,
-                    time_offsets=(time_offsets[test_case_name], time_offsets[cntl_case_name]),
-                    )
+        # Find files and make sure we can retrieve variable
+        files, names = zip(*[
+            (sorted(glob(f'{data_paths[n]}/{glob_strings[n][vname]}')), n) 
+            for n in [test_case_name, *cntl_case_names] 
+            if vname in glob_strings[n]
+        ])
+        # Only files we can find variable name in
+        files, names = zip(*[(f,n) for (f,n) in zip(files, names) if  can_retrieve_field(f[0], vname)])
+
+        # Figure out what mapping files we need based on test and obs data
+        default_grid_file = sorted(glob(f'{data_paths["CERES-SYN"]}/*.nc'))[0]
+        maps = [get_mapping_file(f[0], default_grid_file, mapping_root)
+                if not is_latlon(f[0]) else None for f in files]
 
         # Make zonal mean plots
-        if do_zonal_means:
+        print(f'Making zonal mean plots for {vname}...')
+        figname = f'{graphics_root}/{vname}_{test_case_name.replace(" ", "_")}_vs_all_zonal.png'
+        compare_zonal_means.main(files, names, vname, figname,
+                maps=maps,
+                time_offsets=[time_offsets[n] for n in names],
+                )
 
-            # Figure out what mapping files we need based on test and obs data
-            # TODO: clean this logic up and embed somewhere else?
-            default_grid_file = sorted(glob(f'{data_paths["CERES-SYN"]}/*.nc'))[0]
-            if is_latlon(test_files[0]):
-                test_map = None
-            elif is_latlon(cntl_files[0]):
-                test_map = get_mapping_file(test_files[0], cntl_files[0], mapping_root)
-            else:
-                test_map = get_mapping_file(test_files[0], default_grid_file, mapping_root)
-            if is_latlon(cntl_files[0]):
-                cntl_map = None
-            elif is_latlon(test_files[0]):
-                cntl_map = get_mapping_file(cntl_files[0], test_files[0], mapping_root)
-            else:
-                cntl_map = get_mapping_file(cntl_files[0], default_grid_file, mapping_root)
 
-            # Make zonal mean plots
-            print(f'Making zonal means for {vname}...')
-            figname = f'{graphics_root}/{vname}_{test_case_name.replace(" ", "_")}_vs_{cntl_case_name.replace(" ", "_")}_zonal.png'
-            compare_zonal_means.main(test_files, cntl_files, vname, figname,
-                    test_name=test_case_name, cntl_name=cntl_case_name,
-                    test_map=test_map, cntl_map=cntl_map,
-                    time_offsets=(time_offsets[test_case_name], time_offsets[cntl_case_name]),
-                    )
+    # Make time series plots
+    if do_time_series:
+
+        # Find files and make sure we can retrieve variable
+        files, names = zip(*[
+            (sorted(glob(f'{data_paths[n]}/{glob_strings[n][vname]}')), n) 
+            for n in [test_case_name, *cntl_case_names] 
+            if vname in glob_strings[n]
+        ])
+        # Only files we can find variable name in
+        files, names = zip(*[(f,n) for (f,n) in zip(files, names) if  can_retrieve_field(f[0], vname)])
+
+        # Make time series plots
+        print(f'Making time series for {vname}...')
+        figname = f'{graphics_root}/{vname}_{test_case_name.replace(" ", "_")}_vs_all_timeseries.png'
+        compare_time_series.main(files, vname, figname, names, time_offsets=[time_offsets[n] for n in names])
+

@@ -5,6 +5,7 @@ import dask
 from glob import glob
 from ..e3sm_utils import get_data, get_coords, get_area_weights, area_average, calculate_zonal_mean
 from ..e3sm_utils import get_grid_name, get_mapping_file, get_scrip_grid_ds, create_scrip_grid, mask_all_zero
+from ..e3sm_utils import open_dataset
 from matplotlib import pyplot
 import cftime
 from ..utils import apply_map
@@ -21,30 +22,6 @@ def convert_time(ds):
         except:
             print('Could not convert times to datetimeindex. But proceeding anyway...')
 
-    return ds
-
-
-def open_dataset(files, time_offset=None, **kwargs):
-    # Open dataset as a dask array
-    with dask.config.set(**{'array.slicing.split_large_chunks': True}):
-        ds = xarray.open_mfdataset(
-            sorted(files), combine='by_coords', drop_variables=('P3_output_dim', 'P3_input_dim'), **kwargs) 
-
-    if time_offset is not None:
-        print('Adding year offset...')
-        ds['time'] = ds['time'] + time_offset
-
-    # Rename coordinate variables
-    if 'latitude' in ds.dims: ds = ds.rename({'latitude': 'lat'})
-    if 'longitude' in ds.dims: ds = ds.rename({'longitude': 'lon'})
-
-    if 'msshf' in ds.variables.keys():
-        ds['msshf'].values = -ds['msshf'].values
-
-    # Fix times so we can subset later
-    ds = convert_time(ds)
-
-    # Return dataset
     return ds
 
 
@@ -83,13 +60,16 @@ def to_latlon(da, x, y, map_file=None):
 
         return da, x, y
 
-def main(test_files, cntl_files, vname, fig_name, test_map=None, cntl_map=None,
-        time_offsets=(None, None), test_name='Model', cntl_name='Obs', **kwargs):
+def main(files, names, vname, fig_name, maps=None,
+        time_offsets=None, **kwargs):
+
+    if time_offsets is None: time_offsets = [None for x in files]
+    if maps is None: maps = [None for x in files]
 
     # Load datasets
     print('Load data...'); sys.stdout.flush()
     with dask.config.set(**{'array.slicing.split_large_chunks': True}):
-        datasets = [open_dataset(f, time_offset=dt, chunks={'time': 1}) for (f, dt) in zip((test_files, cntl_files), time_offsets)]
+        datasets = [open_dataset(f, time_offset=dt, chunks={'time': 1}) for (f, dt) in zip(files, time_offsets)]
 
     # Subset for overlapping time periods
     print('Get overlapping time range...'); sys.stdout.flush()
@@ -97,15 +77,11 @@ def main(test_files, cntl_files, vname, fig_name, test_map=None, cntl_map=None,
     t2 = min([ds.time[-1].values for ds in datasets])
     datasets = [ds.sel(time=slice(str(t1), str(t2))) for ds in datasets]
 
-    # Select data
+    # Select (and remask) data
     print('Select data...'); sys.stdout.flush()
-    data_arrays = [get_data(ds, vname) for ds in datasets]
+    data_arrays = [mask_all_zero(get_data(ds, vname)) for ds in datasets]
     coords = [get_coords(ds) for ds in datasets]
     weights = [get_area_weights(ds) for ds in datasets]
-
-    # Fix missing values
-    print('Remask all-zero times...'); sys.stdout.flush()
-    data_arrays = [mask_all_zero(da) for da in data_arrays]
 
     # Compute time averages
     print('Compute time averages...'); sys.stdout.flush()
@@ -115,7 +91,7 @@ def main(test_files, cntl_files, vname, fig_name, test_map=None, cntl_map=None,
     # Remap data to a lat/lon grid to compute zonal means. 
     print('Remap to lat/lon grid if needed...'); sys.stdout.flush()
     with dask.config.set(**{'array.slicing.split_large_chunks': True}):
-        maps = [xarray.open_mfdataset(f) if f is not None else None for f in (test_map, cntl_map)]
+        maps = [xarray.open_mfdataset(f) if f is not None else None for f in maps]
     weights, lons, lats = zip(*[apply_map(m, f) if f is not None else m for (m, f) in zip(weights, maps)])
     means, lons, lats = zip(*[apply_map(m, f) if f is not None else (m, m.lon, m.lat) for (m, f) in zip(means, maps)])
     lats = [m.lat for m in means]
@@ -144,7 +120,7 @@ def main(test_files, cntl_files, vname, fig_name, test_map=None, cntl_map=None,
     # Make line plots of zonal averages
     print('Make line plots of zonal means...'); sys.stdout.flush()
     figure, ax = pyplot.subplots(1, 1)
-    plots = [plot_zonal_mean(y, m, label=l, **kwargs) for (y, m, l) in zip(lats, means, (test_name, cntl_name))]
+    plots = [plot_zonal_mean(y, m, label=l, **kwargs) for (y, m, l) in zip(lats, means, names)]
     pyplot.legend()
     figure.savefig(fig_name, bbox_inches='tight')
 

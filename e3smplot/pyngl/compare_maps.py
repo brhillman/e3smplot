@@ -9,32 +9,17 @@ import dask
 from .plot_map import plot_map
 from ..e3sm_utils import get_data, area_average, regrid_data, get_coords, get_area_weights, mask_all_zero
 from ..e3sm_utils import get_mapping_file
+from ..e3sm_utils import open_dataset
 from ..utils import nice_cntr_levels, apply_map
 import cftime
 import subprocess
 import datetime
 
 
-def convert_time(ds):
-
-    # Convert cftime coordinate
-    if isinstance(ds.time.values[0], cftime._cftime.DatetimeNoLeap):
-        try:
-            ds['time'] = ds.indexes['time'].to_datetimeindex()
-        except:
-            print('Could not convert times to datetimeindex. But proceeding anyway...')
-
-    return ds
-
-
-def subset_time(datasets):
-
-    # Subset based on date range of first dataset
+def common_time_limits(datasets):
     t1 = max([ds.time[0].values for ds in datasets])
     t2 = min([ds.time[-1].values for ds in datasets])
-    datasets = [ds.sel(time=slice(str(t1), str(t2))) for ds in datasets]
-    return datasets
-
+    return t1, t2
 
 def compute_differences(da1, da2, x1, y1, x2, y2, map_file=None):
 
@@ -61,17 +46,6 @@ def compute_differences(da1, da2, x1, y1, x2, y2, map_file=None):
     da_diff.attrs = da1.attrs
 
     return da_diff
-
-
-def compute_area_average(ds, vname):
-    # Get weights; either use pre-computed or cosine(latitude) weights
-    if 'area' in ds.variables.keys():
-        wgt = ds.area
-    else:
-        wgt = numpy.cos(ds.lat * numpy.pi / 180.0)
-
-    # Compute means
-    return area_average(get_data(ds, vname), wgt)
 
 
 def plot_panel(wks, data, x, y, **kwargs):
@@ -121,30 +95,6 @@ def plot_panel(wks, data, x, y, **kwargs):
     return pl
 
 
-def open_dataset(files, time_offset=None, **kwargs):
-    # Open dataset as a dask array
-    with dask.config.set(**{'array.slicing.split_large_chunks': True}):
-        ds = xarray.open_mfdataset(
-            sorted(files), combine='by_coords', drop_variables=('P3_output_dim', 'P3_input_dim'), **kwargs) 
-
-    if time_offset is not None:
-        print('Adding year offset...')
-        ds['time'] = ds['time'] + time_offset
-
-    # Rename coordinate variables
-    if 'latitude' in ds.dims: ds = ds.rename({'latitude': 'lat'})
-    if 'longitude' in ds.dims: ds = ds.rename({'longitude': 'lon'})
-
-    if 'msshf' in ds.variables.keys():
-        ds['msshf'].values = -ds['msshf'].values
-
-    # Fix times so we can subset later
-    ds = convert_time(ds)
-
-    # Return dataset
-    return ds
-
-
 def get_contour_levels(data_arrays, percentile=2, **kwargs):
     # Try to get robust contour intervals
     try:
@@ -173,17 +123,14 @@ def main(test_files, cntl_files, varname, plotname,
 
     # Subset data
     print('Subset consistent time periods...'); sys.stdout.flush()
-    datasets = subset_time(datasets)
+    t1, t2 = common_time_limits(datasets)
+    datasets = [ds.sel(time=slice(str(t1), str(t2))) for ds in datasets]
 
     # Select data
     print('Select data...'); sys.stdout.flush()
-    data_arrays = [get_data(ds, varname) for ds in datasets]
+    data_arrays = [mask_all_zero(get_data(ds, varname)) for ds in datasets]
     coords = [get_coords(ds, ds_grid) for ds, ds_grid in zip(datasets, grids)]
     weights = [get_area_weights(ds) for ds in datasets]
-
-    # Fix missing values
-    print('Remask all-zero times...'); sys.stdout.flush()
-    data_arrays = [mask_all_zero(da) for da in data_arrays]
 
     # Time average
     print('Compute time averages...'); sys.stdout.flush()
@@ -223,6 +170,7 @@ def main(test_files, cntl_files, varname, plotname,
     # Panel plots
     print('Closing plot workspace and writing figures...'); sys.stdout.flush()
     ngl.panel(wks, plots, [1, len(plots)])
+    ngl.destroy(wks)
 
     # Finally, trim whitespace from our figures
     print('Trimming whitespace from figure...'); sys.stdout.flush()

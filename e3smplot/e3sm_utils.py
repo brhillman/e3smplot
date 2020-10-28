@@ -5,6 +5,8 @@ import xarray, xarray.ufuncs
 import os, os.path
 import subprocess
 import sys
+import dask
+import cftime
 
 def get_pressure(dataset, interfaces=False):
     if interfaces:
@@ -24,22 +26,8 @@ def get_pressure(dataset, interfaces=False):
     
     return pressure
 
-def open_dataset(files, **kwargs):
 
-    # Open dataset as a dask array
-    ds = xarray.open_mfdataset(
-        sorted(files), combine='by_coords',
-        drop_variables=('P3_output_dim', 'P3_input_dim'), **kwargs
-    ) 
-
-    # Rename coordinate variables
-    if 'latitude' in ds.dims: ds = ds.rename({'latitude': 'lat'})
-    if 'longitude' in ds.dims: ds = ds.rename({'longitude': 'lon'})
-
-    # Fix sensible heat flux
-    # TODO: should not need to do this
-    if 'msshf' in ds.variables.keys():
-        ds['msshf'].values = -ds['msshf'].values
+def convert_time(ds):
 
     # Convert cftime coordinate
     if isinstance(ds.time.values[0], cftime._cftime.DatetimeNoLeap):
@@ -47,6 +35,29 @@ def open_dataset(files, **kwargs):
             ds['time'] = ds.indexes['time'].to_datetimeindex()
         except:
             print('Could not convert times to datetimeindex. But proceeding anyway...')
+
+    return ds
+
+
+def open_dataset(files, time_offset=None, **kwargs):
+    # Open dataset as a dask array
+    with dask.config.set(**{'array.slicing.split_large_chunks': True}):
+        ds = xarray.open_mfdataset(
+            sorted(files), combine='by_coords', drop_variables=('P3_output_dim', 'P3_input_dim'), **kwargs) 
+
+    if time_offset is not None:
+        print('Adding year offset...')
+        ds['time'] = ds['time'] + time_offset
+
+    # Rename coordinate variables
+    if 'latitude' in ds.dims: ds = ds.rename({'latitude': 'lat'})
+    if 'longitude' in ds.dims: ds = ds.rename({'longitude': 'lon'})
+
+    if 'msshf' in ds.variables.keys():
+        ds['msshf'].values = -ds['msshf'].values
+
+    # Fix times so we can subset later
+    ds = convert_time(ds)
 
     # Return dataset
     return ds
@@ -493,9 +504,7 @@ def get_mapping_file(source_file, target_file, mapping_root, method='nco'):
 
     # Check if we have a mapping file from cntl to test grid. If not, we will create one.
     map_file = f'{mapping_root}/map_{source_grid}_to_{target_grid}_{method}.nc'
-    if os.path.exists(map_file):
-        print('Mapping file exists!')
-    else:
+    if not os.path.exists(map_file):
         print(f'Creating mapping file {map_file}...'); sys.stdout.flush()
         source_grid_file = get_scrip_grid(source_file, mapping_root)
         target_grid_file = get_scrip_grid(target_file, mapping_root)
