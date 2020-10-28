@@ -27,7 +27,8 @@ test_case_name = 'ne256 rrtmgp'
 
 # Set control case names. We will compare the test_case_name against each of
 # these
-cntl_case_names = ('ne256 rrtmg', 'CERES-SYN')
+#cntl_case_names = ('ne256 rrtmg', 'CERES-SYN', 'ERA5')
+cntl_case_names = ('CERES-SYN', 'ERA5')
 
 # Path were we can find netcdf files with output from the test/model case
 data_paths = {
@@ -43,14 +44,14 @@ data_paths = {
 # List of fields we want to make map plots for
 variables = (
     'FSNTOA',
-    #'FSNTOAC',
-    #'FLNT',
-    #'FLNTC',
-    #'PRECT',
-    #'CLDTOT',
-    #'SHFLX',
-    #'TREFHT',
-    #'TMQ',
+    'FSNTOAC',
+    'FLNT',
+    'FLNTC',
+    'PRECT',
+    'CLDTOT',
+    'SHFLX',
+    'TREFHT',
+    'TMQ',
 )
 
 # Glob strings for searching for case files. For model cases, you may want to
@@ -100,14 +101,16 @@ do_zonal_means = True
 os.makedirs(graphics_root, exist_ok=True)
 
 for cntl_case_name in cntl_case_names:
-    print(f'Comparing {test_case_name} to {cntl_case_name}...')
-    if do_contour_maps:
-        for vname in variables:
+    for vname in variables:
 
-            # Find files and make sure we can retrieve variable
-            test_files = sorted(glob(f'{data_paths[test_case_name]}/{glob_strings[test_case_name][vname]}'))
-            cntl_files = sorted(glob(f'{data_paths[cntl_case_name]}/{glob_strings[cntl_case_name][vname]}'))
-            if not can_retrieve_field(cntl_files[0], vname): continue
+        # Find files and make sure we can retrieve variable
+        if vname not in glob_strings[test_case_name] or vname not in glob_strings[cntl_case_name]: continue
+        test_files = sorted(glob(f'{data_paths[test_case_name]}/{glob_strings[test_case_name][vname]}'))
+        cntl_files = sorted(glob(f'{data_paths[cntl_case_name]}/{glob_strings[cntl_case_name][vname]}'))
+        if not can_retrieve_field(cntl_files[0], vname): continue
+
+        print(f'Comparing {test_case_name} to {cntl_case_name}...')
+        if do_contour_maps:
 
             # Figure out what mapping files we need based on test and obs data
             if get_grid_name(test_files[0]) != get_grid_name(cntl_files[0]):
@@ -127,14 +130,8 @@ for cntl_case_name in cntl_case_names:
                     lbLabelFontHeightF=0.02,
                     )
 
-    # Make time series plots
-    if do_time_series:
-        for vname in variables:
-
-            # Find files and make sure we can retrieve variable
-            test_files = sorted(glob(f'{data_paths[test_case_name]}/{glob_strings[test_case_name][vname]}'))
-            cntl_files = sorted(glob(f'{data_paths[cntl_case_name]}/{glob_strings[cntl_case_name][vname]}'))
-            if not can_retrieve_field(cntl_files[0], vname): continue
+        # Make time series plots
+        if do_time_series:
 
             # Make time series plots
             print(f'Making time series for {vname}...')
@@ -144,14 +141,8 @@ for cntl_case_name in cntl_case_names:
                     time_offsets=(time_offsets[test_case_name], time_offsets[cntl_case_name]),
                     )
 
-    # Make zonal mean plots
-    if do_zonal_means:
-        for vname in variables:
-
-            # Find files and make sure we can retrieve variable
-            test_files = sorted(glob(f'{data_paths[test_case_name]}/{glob_strings[test_case_name][vname]}'))
-            cntl_files = sorted(glob(f'{data_paths[cntl_case_name]}/{glob_strings[cntl_case_name][vname]}'))
-            if not can_retrieve_field(cntl_files[0], vname): continue
+        # Make zonal mean plots
+        if do_zonal_means:
 
             # Figure out what mapping files we need based on test and obs data
             # TODO: clean this logic up and embed somewhere else?
