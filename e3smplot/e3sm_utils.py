@@ -339,7 +339,28 @@ def get_data(dataset, field):
     return data
 
 
+def can_retrieve_field(f, v):
+    '''
+    Check if named field can be retrieved/derived from file.
+
+    Inputs:
+        f: filename
+        v: variable name
+    Returns:
+        True if variable can be retrieved/derived, False otherwise.
+    '''
+    result = False
+    with xarray.open_mfdataset(f) as ds:
+        if get_data(ds, v) is not None:
+            result = True
+    return result
+
+
 def get_grid_name(ds, **kwargs):
+
+    # If ds is a string, then we need to open the dataset still
+    if isinstance(ds, str):
+        ds = xarray.open_mfdataset(ds)
 
     # This is maybe...a little hacky and fragile. Determine grid based on number
     # of columns in the dataset. For well-annotated netcdf files, we could grab
@@ -626,6 +647,17 @@ def calculate_zonal_mean(data, weights, old_lat, avg_dims=None, lat_edges=None, 
         dims=dims, coords=coords, attrs=data.attrs
     )
     return data_zonal, lat_centers
+
+
+def is_latlon(f):
+    if isinstance(f, xarray.Dataset):
+        ds = f
+    else:
+        ds = xarray.open_mfdataset(f)
+    if any(dim in ds.dims for dim in ('lat', 'latitude')) and any(dim in ds.dims for dim in ('lon', 'longitude')):
+        return True
+    else:
+        return False
 
 
 def mask_all_zero(d, dims=None):

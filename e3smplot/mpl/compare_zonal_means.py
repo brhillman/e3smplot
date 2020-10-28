@@ -70,6 +70,19 @@ def zonal_mean(data, weights=None):
     return zonal_mean
 
 
+def to_latlon(da, x, y, map_file=None):
+    if len(da.shape) == 1:
+        if map_file is None:
+            # Create latlon file
+            print('Creating a default grid file...')
+
+            # Get mapping file
+
+        # Apply map
+        da, x, y = apply_map(da)
+
+        return da, x, y
+
 def main(test_files, cntl_files, vname, fig_name, test_map=None, cntl_map=None,
         time_offsets=(None, None), test_name='Model', cntl_name='Obs', **kwargs):
 
@@ -103,13 +116,9 @@ def main(test_files, cntl_files, vname, fig_name, test_map=None, cntl_map=None,
     print('Remap to lat/lon grid if needed...'); sys.stdout.flush()
     with dask.config.set(**{'array.slicing.split_large_chunks': True}):
         maps = [xarray.open_mfdataset(f) if f is not None else None for f in (test_map, cntl_map)]
-    print('Remap weights...'); sys.stdout.flush()
     weights, lons, lats = zip(*[apply_map(m, f) if f is not None else m for (m, f) in zip(weights, maps)])
-    print('Remap means...'); sys.stdout.flush()
     means, lons, lats = zip(*[apply_map(m, f) if f is not None else (m, m.lon, m.lat) for (m, f) in zip(means, maps)])
-    print('Get lat...'); sys.stdout.flush()
     lats = [m.lat for m in means]
-    print('done.')
 
     # Compute *zonal* average. Note that this is tricky for unstructured data.
     # Our approach is to compute means over latitude bins, and return a new

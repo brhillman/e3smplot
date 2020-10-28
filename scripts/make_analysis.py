@@ -6,6 +6,7 @@ import xarray
 import ngl
 import numpy
 from e3smplot.e3sm_utils import area_average, open_dataset, get_mapping_file
+from e3smplot.e3sm_utils import get_grid_name, can_retrieve_field, is_latlon
 from e3smplot.pyngl import compare_maps
 from e3smplot.mpl import compare_time_series, compare_zonal_means
 import os.path
@@ -20,12 +21,54 @@ import datetime
 mapping_root = '/global/cscratch1/sd/bhillma/grids'
 
 # A short, meaningful name with which to label plots and set output filenames.
-# Does not need to match the case name of the model run
-test_case_name = 'lamlow'
+# Does not need to match the case name of the model run, but does need to match
+# one of the data_paths keys below!
+test_case_name = 'ne256 rrtmgp'
+
+# Set control case names. We will compare the test_case_name against each of
+# these
+cntl_case_names = ('ne256 rrtmg', 'CERES-SYN')
 
 # Path were we can find netcdf files with output from the test/model case
-#test_data_path = '/global/cscratch1/sd/terai/e3sm_scratch/cori-knl/master.ne1024pg2_r0125_oRRS18to6v3.F2010-SCREAM-HR-DYAMOND2.cori-knl_intel.1536x8x16.DY2_Oct9.20201009-16/run'
-test_data_path = '/global/cscratch1/sd/bogensch/E3SM_simulations/master.ne256pg2_r0125_oRRS18to6v3.F2010-SCREAM-HR-DYAMOND2.cori-knl_intel.1024x16x8.DY2_Oct6.20201022-16.lamlow.001a/run'
+data_paths = {
+    'ne1024'      : '/global/cscratch1/sd/terai/e3sm_scratch/cori-knl/master.ne1024pg2_r0125_oRRS18to6v3.F2010-SCREAM-HR-DYAMOND2.cori-knl_intel.1536x8x16.DY2_Oct9.20201009-16/run',
+    'ne256 lamlow': '/global/cscratch1/sd/bogensch/E3SM_simulations/master.ne256pg2_r0125_oRRS18to6v3.F2010-SCREAM-HR-DYAMOND2.cori-knl_intel.1024x16x8.DY2_Oct6.20201022-16.lamlow.001a/run',
+    'ne256 rrtmg' : '/global/cscratch1/sd/bhillma/scream/cases/9bfb38267.ne256pg2_r0125_oRRS18to6v3.F2010-SCREAM-HR-DYAMOND2.cori-knl_intel.192x16x8.rrtmg.20201021-0921/run',
+    'ne256 rrtmgp': '/global/cscratch1/sd/bhillma/scream/cases/9bfb38267.ne256pg2_r0125_oRRS18to6v3.F2010-SCREAM-HR-DYAMOND2.cori-knl_intel.192x16x8.rrtmgp.20201021-1722/run',
+    'CERES-SYN': '/global/cfs/cdirs/e3sm/terai/Obs_datasets/CERES',
+    'ERA5': '/global/cfs/cdirs/e3sm/bhillma/obs_datasets/ERA5',
+    'GPM': None, # GPM not supported yet
+}
+
+# List of fields we want to make map plots for
+variables = (
+    'FSNTOA',
+    #'FSNTOAC',
+    #'FLNT',
+    #'FLNTC',
+    #'PRECT',
+    #'CLDTOT',
+    #'SHFLX',
+    #'TREFHT',
+    #'TMQ',
+)
+
+# Glob strings for searching for case files. For model cases, you may want to
+# search for different history tapes (h0, h1, h2, etc). 
+# For some of the obs datasets, we have separate files for different categories
+# of fields.
+glob_strings = {
+    'ERA5': {'PRECT' : 'ERA5_surf*.nc',
+             'SHFLX' : 'ERA5_surf*.nc',
+             'TREFHT': 'ERA5_surf*.nc',
+             'TMQ'   : 'ERA5_surf*.nc',},
+    'CERES-SYN': {v: '*.nc' for v in variables},
+    # For model-model comparisons, need to specify history tape number
+    'ne1024 rrtmg': {v: '*.h1.*.nc' for v in variables},
+    'ne256 rrtmg' : {v: '*.h1.*.nc' for v in variables},
+    'ne256 rrtmgp': {v: '*.h1.*.nc' for v in variables},
+    'ne256 lamlow': {v: '*.h1.*.nc' for v in variables},
+}
 
 # Time offsets; hack so we can compare F-cases.
 # HOW TO USE THIS FEATURE: in the event that you want to compare a run for a
@@ -39,7 +82,9 @@ test_data_path = '/global/cscratch1/sd/bogensch/E3SM_simulations/master.ne256pg2
 # (2020-01-20), but accidentally ran an F-case (0001-01-01). We want a time
 # offset in that case of 365 * 2019 + 20 days. Any entries in this list that are
 # None type will not add an offset (the default behavior).
-time_offsets = [datetime.timedelta(days=(365*2019+20)), None]
+#time_offsets = [datetime.timedelta(days=(365*2019+20)), None]
+time_offsets = {c: None for c in [test_case_name, *cntl_case_names]}
+time_offsets['ne256 lamlow'] = datetime.timedelta(days=(365*2019+20))
 
 # Where should we write the plot files?
 graphics_root = './graphics'
@@ -47,124 +92,88 @@ graphics_root = './graphics'
 # Flags to control what kind of plots to make. You probably want to make them
 # all, but being able to disable for testing is useful. Some of them take quite
 # a while to make.
-do_contour_maps = True
+do_contour_maps = False
 do_time_series = False
 do_zonal_means = True
-
-# List of fields we want to make map plots for
-variables = (
-    'FSNTOA',
-    'FSNTOAC',
-    'FLNT',
-    'FLNTC',
-    'PRECT',
-    'CLDTOT',
-    'SHFLX',
-    'TREFHT',
-    'TMQ',
-)
-
-#
-# Stuff the user may want to change, but probably not
-#
-
-# Dict specifying what obs we prefer to use for comparison
-obs_sources = {
-    'FSNTOA' : 'CERES-SYN',
-    'FSNTOAC': 'CERES-SYN',
-    'FLNT'   : 'CERES-SYN',
-    'FLNTC'  : 'CERES-SYN',
-    'CLDTOT' : 'CERES-SYN',
-    'PRECT'  : 'ERA5',
-    'TMQ'    : 'ERA5',
-    'SHFLX'  : 'ERA5',
-    'TREFHT' : 'ERA5',
-}
-
-# Paths to obs datasets where we can find netcdf files. You may need to modify
-# this for your system, but all users on the project should have access to these
-# locations
-obs_data_path = {
-    'CERES-SYN': '/global/cfs/cdirs/e3sm/terai/Obs_datasets/CERES',
-    'ERA5': '/global/cfs/cdirs/e3sm/bhillma/obs_datasets/ERA5',
-    'GPM': None, # GPM not supported yet
-}
-
-# For some of the obs datasets, we have separate files for different categories
-# of fields. Mostly this is just ERA5, but I could see needing to do something
-# like this for things *other* than h1 files from EAM as well. This is here to
-# help automate our searches, but he surefire way would still be to hard-code
-# the glob lines below
-obs_data_prefix = {
-    'FSNTOA' : '',
-    'FSNTOAC': '',
-    'FLNT'   : '',
-    'FLNTC'  : '',
-    'CLDTOT' : '',
-    'PRECT'  : 'ERA5_surf',
-    'SHFLX': 'ERA5_surf',
-    'TREFHT': 'ERA5_surf',
-    'TMQ': 'ERA5_surf',
-}
 
 # Before we do anything, make sure our plot directory exists
 os.makedirs(graphics_root, exist_ok=True)
 
-if do_contour_maps:
-    for vname in variables:
+for cntl_case_name in cntl_case_names:
+    print(f'Comparing {test_case_name} to {cntl_case_name}...')
+    if do_contour_maps:
+        for vname in variables:
 
-        print(f'Making contour maps for {vname}...')
+            # Find files and make sure we can retrieve variable
+            test_files = sorted(glob(f'{data_paths[test_case_name]}/{glob_strings[test_case_name][vname]}'))
+            cntl_files = sorted(glob(f'{data_paths[cntl_case_name]}/{glob_strings[cntl_case_name][vname]}'))
+            if not can_retrieve_field(cntl_files[0], vname): continue
 
-        # Find files
-        test_files = sorted(glob(f'{test_data_path}/*.h1.*.nc'))
-        obs_files = sorted(glob(f'{obs_data_path[obs_sources[vname]]}/{obs_data_prefix[vname]}*.nc'))
+            # Figure out what mapping files we need based on test and obs data
+            if get_grid_name(test_files[0]) != get_grid_name(cntl_files[0]):
+                map_file = get_mapping_file(test_files[0], cntl_files[0], mapping_root)
+            else:
+                map_file = None
 
-        # Figure out what mapping files we need based on test and obs data
-        map_file = get_mapping_file(test_files[0], obs_files[0], mapping_root)
+            # Compare maps
+            print(f'Making contour maps for {vname}...')
+            figname = f'{graphics_root}/{vname}_{test_case_name.replace(" ", "_")}_vs_{cntl_case_name.replace(" ", "_")}.png'
+            compare_maps.main(test_files, cntl_files, vname, figname,
+                    test_name=test_case_name, cntl_name=cntl_case_name,
+                    map_file=map_file,
+                    time_offsets=(time_offsets[test_case_name], time_offsets[cntl_case_name]),
+                    lbAutoManage=False,
+                    lbTitleFontHeightF=0.02,
+                    lbLabelFontHeightF=0.02,
+                    )
 
-        # Compare maps
-        figname = f'{graphics_root}/{vname}_{test_case_name}_vs_{obs_sources[vname]}.png'
-        compare_maps.main(test_files, obs_files, vname, figname,
-                test_name=test_case_name, cntl_name=obs_sources[vname],
-                map_file=map_file,
-                time_offsets=time_offsets,
-                lbAutoManage=False,
-                lbTitleFontHeightF=0.02,
-                lbLabelFontHeightF=0.02,
-                )
+    # Make time series plots
+    if do_time_series:
+        for vname in variables:
 
-# Make time series plots
-if do_time_series:
-    for vname in variables:
+            # Find files and make sure we can retrieve variable
+            test_files = sorted(glob(f'{data_paths[test_case_name]}/{glob_strings[test_case_name][vname]}'))
+            cntl_files = sorted(glob(f'{data_paths[cntl_case_name]}/{glob_strings[cntl_case_name][vname]}'))
+            if not can_retrieve_field(cntl_files[0], vname): continue
 
-        # Find files
-        print(f'Making time series for {vname}...')
-        test_files = sorted(glob(f'{test_data_path}/*.h1.*.nc'))
-        obs_files = sorted(glob(f'{obs_data_path[obs_sources[vname]]}/{obs_data_prefix[vname]}*.nc'))
+            # Make time series plots
+            print(f'Making time series for {vname}...')
+            figname = f'{graphics_root}/{vname}_{test_case_name.replace(" ", "_")}_vs_{cntl_case_name.replace(" ", "_")}_timeseries.png'
+            compare_time_series.main(test_files, cntl_files, vname, figname,
+                    test_name=test_case_name, cntl_name=cntl_case_name,
+                    time_offsets=(time_offsets[test_case_name], time_offsets[cntl_case_name]),
+                    )
 
-        # Make time series plots
-        figname = f'{graphics_root}/{vname}_{test_case_name}_vs_{obs_sources[vname]}_timeseries.png'
-        compare_time_series.main(test_files, obs_files, vname, figname,
-                test_name=test_case_name, cntl_name=obs_sources[vname],
-                time_offsets=time_offsets,
-                )
+    # Make zonal mean plots
+    if do_zonal_means:
+        for vname in variables:
 
-# Make zonal mean plots
-if do_zonal_means:
-    for vname in variables:
+            # Find files and make sure we can retrieve variable
+            test_files = sorted(glob(f'{data_paths[test_case_name]}/{glob_strings[test_case_name][vname]}'))
+            cntl_files = sorted(glob(f'{data_paths[cntl_case_name]}/{glob_strings[cntl_case_name][vname]}'))
+            if not can_retrieve_field(cntl_files[0], vname): continue
 
-        # Find files
-        print(f'Making zonal means for {vname}...')
-        test_files = sorted(glob(f'{test_data_path}/*.h1.*.nc'))
-        obs_files = sorted(glob(f'{obs_data_path[obs_sources[vname]]}/{obs_data_prefix[vname]}*.nc'))
+            # Figure out what mapping files we need based on test and obs data
+            # TODO: clean this logic up and embed somewhere else?
+            default_grid_file = sorted(glob(f'{data_paths["CERES-SYN"]}/*.nc'))[0]
+            if is_latlon(test_files[0]):
+                test_map = None
+            elif is_latlon(cntl_files[0]):
+                test_map = get_mapping_file(test_files[0], cntl_files[0], mapping_root)
+            else:
+                test_map = get_mapping_file(test_files[0], default_grid_file, mapping_root)
+            if is_latlon(cntl_files[0]):
+                cntl_map = None
+            elif is_latlon(test_files[0]):
+                cntl_map = get_mapping_file(cntl_files[0], test_files[0], mapping_root)
+            else:
+                cntl_map = get_mapping_file(cntl_files[0], default_grid_file, mapping_root)
 
-        # Figure out what mapping files we need based on test and obs data
-        test_map = get_mapping_file(test_files[0], obs_files[0], mapping_root)
-
-        # Make time series plots
-        figname = f'{graphics_root}/{vname}_{test_case_name}_vs_{obs_sources[vname]}_zonal.png'
-        compare_zonal_means.main(test_files, obs_files, vname, figname,
-                test_name=test_case_name, cntl_name=obs_sources[vname],
-                test_map=test_map,
-                time_offsets=time_offsets,
-                )
+            # Make zonal mean plots
+            print(f'Making zonal means for {vname}...')
+            figname = f'{graphics_root}/{vname}_{test_case_name.replace(" ", "_")}_vs_{cntl_case_name.replace(" ", "_")}_zonal.png'
+            compare_zonal_means.main(test_files, cntl_files, vname, figname,
+                    test_name=test_case_name, cntl_name=cntl_case_name,
+                    test_map=test_map, cntl_map=cntl_map,
+                    time_offsets=(time_offsets[test_case_name], time_offsets[cntl_case_name]),
+                    )

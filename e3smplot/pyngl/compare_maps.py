@@ -8,6 +8,7 @@ import xarray
 import dask
 from .plot_map import plot_map
 from ..e3sm_utils import get_data, area_average, regrid_data, get_coords, get_area_weights, mask_all_zero
+from ..e3sm_utils import get_mapping_file
 from ..utils import nice_cntr_levels, apply_map
 import cftime
 import subprocess
@@ -39,6 +40,8 @@ def compute_differences(da1, da2, x1, y1, x2, y2, map_file=None):
 
     # If coordinates are not the same, then we need to regrid
     if x1.shape != x2.shape or y1.shape != y2.shape:
+        if map_file is None:
+            map_file = get_mapping_file(da1, da2)
         if map_file is None:
             print("                                                            ")
             print("Warning: no map file specified, will use griddata to regrid!")
