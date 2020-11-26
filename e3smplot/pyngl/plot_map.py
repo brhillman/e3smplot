@@ -4,6 +4,9 @@ import plac
 import ngl
 import numpy
 import xarray
+import os
+from e3smplot.utils import nice_cntr_levels
+import dask
 
 def plot_map(wks, x, y, data, **kwargs):
 
@@ -38,10 +41,14 @@ def plot_map(wks, x, y, data, **kwargs):
     return plot
 
 
-def main(datafile, varname, plotname, gridfile=None, **kwargs):
+def main(varname, plotname, *datafiles, gridfile=None, time_index=None,
+        vmin=None, vmax=None, **kwargs):
 
     # Read data
-    ds_data = xarray.open_dataset(datafile)
+    ds_data = xarray.open_mfdataset(
+        sorted(datafiles), chunks={'time': 1},
+        drop_variables=('P3_input_dim', 'P3_output_dim'),
+    )
     data = ds_data[varname]
     if gridfile is not None:
         ds_grid = xarray.open_dataset(gridfile).rename({'grid_size': 'ncol'})
@@ -59,26 +66,48 @@ def main(datafile, varname, plotname, gridfile=None, **kwargs):
 
     # Make sure we don't have time or level dimensions
     if 'time' in data.dims:
-        data = data.isel(time=0).squeeze()
+        if time_index is None:
+            data = data.mean(dim='time', keep_attrs=True).squeeze()
+        else:
+            data = data.isel(time=int(time_index))
     if 'lev' in data.dims:
         data = data.isel(lev=-1).squeeze()
+    if 'time' in x.dims: x = x.isel(time=0)
+    if 'time' in y.dims: y = y.isel(time=0)
 
     # Setup the canvas
-    plot_format='png'
-    wks = ngl.open_wks(plot_format, plotname)
+    wks = ngl.open_wks(
+        os.path.splitext(plotname)[1][1:],
+        os.path.splitext(plotname)[0]
+    )
+
+    # Get contour levels; the explicit type casting deals with problems calling
+    # this standalone code using subprocess.run() with string arguments, where
+    # all kwargs are going to be interpreted as strings
+    if vmin is None: vmin = data.min().values
+    if vmax is None: vmax = data.max().values
+    if float(vmin) < 0 and float(vmax) > 0:
+        *__, clevels = nice_cntr_levels(float(vmin), float(vmax), returnLevels=True, max_steps=13, aboutZero=True)
+    else:
+        *__, clevels = nice_cntr_levels(float(vmin), float(vmax), returnLevels=True, max_steps=13)
+    kwargs['cnLevels'] = clevels #get_contour_levels(data)
+    kwargs['cnLevelSelectionMode'] = 'ExplicitLevels'
 
     # Make plot
+    if 'lbTitleString' not in kwargs.keys():
+        kwargs['lbTitleString'] = f'{data.long_name} ({data.units})'
     plot = plot_map(
         wks, x.values, y.values, data.values,
         mpGeophysicalLineColor='white',
         lbOrientation='horizontal', 
-        lbTitleString='%s (%s)'%(data.long_name, data.units),
         cnFillMode='RasterFill',
         cnLineLabelsOn=False, cnLinesOn=False, **kwargs
     )
 
+    ngl.destroy(wks)
+
     # Close things
-    ngl.end()
+    #ngl.end()
 
 
 if __name__ == '__main__':
