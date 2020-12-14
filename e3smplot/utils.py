@@ -2,6 +2,7 @@ import numpy
 import xarray
 import scipy.sparse
 import sparse
+import sys
 
 ################################################################
 # This function is one of two codes contributed by Lou Wicker
@@ -156,7 +157,11 @@ def apply_map(da, map_file, template=None):
 
     # Do the remapping
     weights = scipy.sparse.coo_matrix((ds_map['S'].values, (ds_map['row'].values-1, ds_map['col'].values-1)))
-    da_regrid = weights.dot(da.data)
+    if len(da.shape) == 1:
+        da_flat = da.data
+    elif len(da.shape) == 2:
+        da_flat = da.data.reshape([da.shape[0]*da.shape[1]])
+    da_regrid = weights.dot(da_flat)
 
     # Figure out coordinate variables and whether or not we should reshape the
     # output before returning
@@ -187,4 +192,30 @@ def apply_map(da, map_file, template=None):
     return da_regrid, x, y
 
 
+# update_progress() : Displays or updates a console progress bar
+def update_progress(iteration, num_iterations, bar_length=10):
+    '''
+    Display and update a console progress bar
+    '''
+
+    # Get progress as a fraction and compute size of "block" filled to visually
+    # represent fraction completed.
+    progress = 1.0 * iteration / num_iterations
+    block = int(round(bar_length * progress))
+
+    # Get status; if status < 1 there will be no newline, so we need to add one
+    # explicitly on the last iteration.
+    if progress >= 1:
+        status = "\r\n"
+    else:
+        status = ""
+
+    # Display appropriate text to build status bar
+    text = "\rPercent: [%s] %i of %i (%.2f%%)%s"%(
+        "#"*block + "-"*(bar_length-block),
+        iteration, num_iterations,
+        progress*100, status
+    )
+    sys.stdout.write(text)
+    sys.stdout.flush()
 

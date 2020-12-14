@@ -3,7 +3,7 @@ import xarray
 import numpy
 import dask
 from glob import glob
-from ..e3sm_utils import get_data, get_area_weights, area_average, calculate_zonal_mean
+from ..e3sm_utils import get_data, get_coords, get_area_weights, area_average, calculate_zonal_mean
 from ..e3sm_utils import get_grid_name, get_mapping_file, get_scrip_grid_ds, create_scrip_grid, mask_all_zero
 from ..e3sm_utils import open_dataset
 from matplotlib import pyplot
@@ -27,9 +27,15 @@ def convert_time(ds):
 
 def plot_zonal_mean(lat, data, **kwargs):
     ax = pyplot.gca()
-    pl = ax.plot(lat, data, **kwargs)
-    ax.set_xlabel('Latitude')
-    ax.set_ylabel(f'{data.long_name} ({data.units})')
+    if (len(data.shape) == 1):
+        pl = ax.plot(lat, data, **kwargs)
+        ax.set_xlabel('Latitude')
+        ax.set_ylabel(f'{data.long_name} ({data.units})')
+    elif (len(data.shape) == 2):
+        pl = ax.contourf(data, **kwargs)
+        ax.set_xlabel('Latitude')
+        ax.set_ylabel('Vertical')
+        cb = pyplot.colorbar(pl, orientation='horizontal')
     return pl
 
 
@@ -61,40 +67,39 @@ def to_latlon(da, x, y, map_file=None):
         return da, x, y
 
 def main(files, names, vname, fig_name, maps=None,
-        time_offsets=None, verbose=False, dpi=800, **kwargs):
+        time_offsets=None, **kwargs):
 
     if time_offsets is None: time_offsets = [None for x in files]
     if maps is None: maps = [None for x in files]
 
     # Load datasets
-    if verbose: print('Load data...'); sys.stdout.flush()
-    #with dask.config.set(**{'array.slicing.split_large_chunks': True}):
-    datasets = [open_dataset(f, time_offset=dt, chunks={'time': 1}) for (f, dt) in zip(files, time_offsets)]
+    print('Load data...'); sys.stdout.flush()
+    with dask.config.set(**{'array.slicing.split_large_chunks': True}):
+        datasets = [open_dataset(f, time_offset=dt, chunks={'time': 1}) for (f, dt) in zip(files, time_offsets)]
 
-    # Subset for overlapping time periods, and compute time average
-    if verbose: print('Get overlapping time range...'); sys.stdout.flush()
+    # Subset for overlapping time periods
+    print('Get overlapping time range...'); sys.stdout.flush()
     t1 = max([ds.time[0].values for ds in datasets])
     t2 = min([ds.time[-1].values for ds in datasets])
     datasets = [ds.sel(time=slice(str(t1), str(t2))) for ds in datasets]
-    if verbose: print('Compute time averages...'); sys.stdout.flush()
-    datasets = [ds.mean(dim='time', keep_attrs=True) for ds in datasets]
 
     # Select (and remask) data
-    if verbose: print('Select data...'); sys.stdout.flush()
+    print('Select data...'); sys.stdout.flush()
     data_arrays = [mask_all_zero(get_data(ds, vname)) for ds in datasets]
+    coords = [get_coords(ds) for ds in datasets]
     weights = [get_area_weights(ds) for ds in datasets]
 
-    # Load data into memory
-    if verbose: print('Force dask to execute and load into memory...'); sys.stdout.flush()
-    for i in range(len(data_arrays)):
-        data_arrays[i].load()
-        weights[i].load()
+    # Compute time averages
+    print('Compute time averages...'); sys.stdout.flush()
+    means = [da.mean(dim='time', keep_attrs=True) for da in data_arrays]
+    weights = [wgt.mean(dim='time', keep_attrs=True) if 'time' in wgt.dims else wgt for wgt in weights]
 
     # Remap data to a lat/lon grid to compute zonal means. 
-    if verbose: print('Remap to lat/lon grid if needed...'); sys.stdout.flush()
-    maps = [xarray.open_dataset(f) if f is not None else None for f in maps]
-    weights = [apply_map(m, f)[0] if f is not None else m for (m, f) in zip(weights, maps)]
-    means = [apply_map(m, f)[0] if f is not None else m for (m, f) in zip(data_arrays, maps)]
+    print('Remap to lat/lon grid if needed...'); sys.stdout.flush()
+    with dask.config.set(**{'array.slicing.split_large_chunks': True}):
+        maps = [xarray.open_mfdataset(f) if f is not None else None for f in maps]
+    weights, lons, lats = zip(*[apply_map(m, f) if f is not None else m for (m, f) in zip(weights, maps)])
+    means, lons, lats = zip(*[apply_map(m, f) if f is not None else (m, m.lon, m.lat) for (m, f) in zip(means, maps)])
     lats = [m.lat for m in means]
 
     # Compute *zonal* average. Note that this is tricky for unstructured data.
@@ -105,29 +110,29 @@ def main(files, names, vname, fig_name, maps=None,
     # average the data, and returns the binned/averaged data and the new
     # latitudes.
     #if map_file is not None:
-    #    if verbose: print('Apply map...')
+    #    print('Apply map...')
     #    means[0] = apply_map(means[0], map_file, template=means[1])
     #    weights[0] = apply_map(weights[0], map_file, template=means[1])
     #    lats[0] = lats[1]
     #    weights, *__ = zip(*[xarray.broadcast(w, d) for (w, d) in zip(weights, means)])
     #    means = [zonal_mean(d, weights=w) for (d, w) in zip(means, weights)]
     #else:
-    #    if verbose: print('Try using our slow zonal mean routine...')
+    #    print('Try using our slow zonal mean routine...')
     #    means, lats = zip(*[calculate_zonal_mean(d, w, y) for (d, w, y) in zip(means, weights, lats)])
-    if verbose: print('Compute zonal means...'); sys.stdout.flush()
+    print('Compute zonal means...'); sys.stdout.flush()
     weights, *__ = zip(*[xarray.broadcast(w, d) for (w, d) in zip(weights, means)])
     means = [zonal_mean(d, weights=w) for (d, w) in zip(means, weights)]
-    #means = [d.mean(dim='lon', keep_attrs=True) for d in means]
 
     # Make line plots of zonal averages
-    if verbose: print('Make line plots of zonal means...'); sys.stdout.flush()
+    print('Make line plots of zonal means...'); sys.stdout.flush()
     figure, ax = pyplot.subplots(1, 1)
     plots = [plot_zonal_mean(y, m, label=l, **kwargs) for (y, m, l) in zip(lats, means, names)]
-    pyplot.legend()
-    figure.savefig(fig_name, bbox_inches='tight', dpi=dpi)
+    if len(means[0].shape) == 1:
+        pyplot.legend()
+    figure.savefig(fig_name, bbox_inches='tight')
 
     # Finally, trim whitespace from our figures
-    if verbose: print('Trimming whitespace from figure...'); sys.stdout.flush()
+    print('Trimming whitespace from figure...'); sys.stdout.flush()
     subprocess.call(f'convert -trim {fig_name} {fig_name}'.split(' '))
 
 

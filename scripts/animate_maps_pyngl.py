@@ -27,14 +27,15 @@ def main(var_name, animation_name, *inputfiles, **kwargs):
             data = get_data(ds, var_name)
             lon = get_data(ds, 'lon')
             lat = get_data(ds, 'lat')
-            data = data.where(
-                (lon >  float(kwargs['mpMinLonF'])) & 
-                (lon <= float(kwargs['mpMaxLonF'])) &
-                (lat >  float(kwargs['mpMinLatF'])) & 
-                (lat <= float(kwargs['mpMaxLatF']))
-            )
+            if 'mpMinLonF' in kwargs.keys(): data = data.where(lon >  float(kwargs['mpMinLonF']))
+            if 'mpMaxLonF' in kwargs.keys(): data = data.where(lon <= float(kwargs['mpMaxLonF']))
+            if 'mpMinLatF' in kwargs.keys(): data = data.where(lat >  float(kwargs['mpMinLatF']))
+            if 'mpMaxLatF' in kwargs.keys(): data = data.where(lat <= float(kwargs['mpMaxLatF']))
             if 'vmin' not in kwargs.keys(): kwargs['vmin'] = data.min().values
             if 'vmax' not in kwargs.keys(): kwargs['vmax'] = data.max().values
+            #percentile = 2
+            #cmin = min([numpy.nanpercentile(data.values, percentile) for da in data_arrays])
+            #cmax = max([numpy.nanpercentile(data.values, 100-percentile) for da in data_arrays])
             # Find length of time dimension to loop over later
             time = ds['time'].copy(deep=True)
             ntime = len(ds.time)

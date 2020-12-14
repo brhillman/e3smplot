@@ -7,6 +7,7 @@ import subprocess
 import sys
 import dask
 import cftime
+import warnings
 
 def get_pressure(dataset, interfaces=False):
     if interfaces:
@@ -28,22 +29,25 @@ def get_pressure(dataset, interfaces=False):
 
 
 def convert_time(ds):
-
     # Convert cftime coordinate
     if isinstance(ds.time.values[0], cftime._cftime.DatetimeNoLeap):
         try:
-            ds['time'] = ds.indexes['time'].to_datetimeindex()
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                ds['time'] = ds.indexes['time'].to_datetimeindex()
         except:
             print('Could not convert times to datetimeindex. But proceeding anyway...')
 
     return ds
 
 
-def open_dataset(files, time_offset=None, **kwargs):
+def open_dataset(*files, time_offset=None, **kwargs):
     # Open dataset as a dask array
     with dask.config.set(**{'array.slicing.split_large_chunks': True}):
         ds = xarray.open_mfdataset(
-            sorted(files), combine='by_coords', drop_variables=('P3_output_dim', 'P3_input_dim'), **kwargs) 
+            sorted(files), combine='by_coords', 
+            drop_variables=('P3_output_dim', 'P3_input_dim'), **kwargs
+        )
 
     if time_offset is not None:
         print('Adding year offset...')
@@ -54,7 +58,7 @@ def open_dataset(files, time_offset=None, **kwargs):
     if 'longitude' in ds.dims: ds = ds.rename({'longitude': 'lon'})
 
     if 'msshf' in ds.variables.keys():
-        ds['msshf'].values = -ds['msshf'].values
+        ds['msshf'].data = -ds['msshf'].data
 
     # Fix times so we can subset later
     ds = convert_time(ds)
@@ -215,6 +219,12 @@ def get_data(dataset, field):
             data = flux_dn - flux_up
             data.attrs['long_name'] = 'Net TOA SW clearsky flux'
             data.attrs['units'] = 'W/m2'
+    elif field == 'FSNT':
+        try:
+            data = get_data(dataset, 'FSNTOA')
+            warnings.warn('Using FSNTOA instead of FSNT')
+        except:
+            pass
     elif field == 'FLNT':
         if 'toa_lw_all_3h' in dataset.variables.keys():
             data = dataset['toa_lw_all_3h']
@@ -246,7 +256,14 @@ def get_data(dataset, field):
             data = get_data(dataset, 'mtpr')
             # Convert units from kg m^-2 s^-1 to mm/day
             density = 1.0e3 # kg / m^3
-            data.values = data.values / density * 1e3 * 60 * 60 * 24
+            data.data = data.data / density * 1e3 * 60 * 60 * 24
+            data.name = 'PRECT'
+            data.attrs['long_name'] = 'Total precipitation rate'
+            data.attrs['units'] = 'mm/day'
+        elif 'precipitationCal' in dataset:
+            data = get_data(dataset, 'precipitationCal')
+            # Convert from mm/hr to mm/day
+            data.data = data.data * 24.0
             data.name = 'PRECT'
             data.attrs['long_name'] = 'Total precipitation rate'
             data.attrs['units'] = 'mm/day'
@@ -256,6 +273,12 @@ def get_data(dataset, field):
         data = clwp + ciwp
         data.attrs = clwp.attrs
         data.attrs['long_name'] = 'Total gridbox cloud water path'
+    elif field == 'LIQ_MASK':
+        data = get_liq_cloud_mask(dataset)
+    elif field == 'ICE_MASK':
+        data = get_ice_cloud_mask(dataset)
+    elif field == 'CLD_MASK':
+        data = get_cloud_mask(dataset)
         
     # CALIPSO-simulated or CALIPSO-retrieved fields
     elif field == 'cltcalipso':
@@ -311,19 +334,27 @@ def get_data(dataset, field):
         if 'tcwv' in dataset.variables.keys():
             data = get_data(dataset, 'tcwv')
 
-    
     # Check if we were able to find or derive the requested field
     if data is None:
         raise ValueError(f'{field} not found in dataset and no variables found to derive') 
 
+    # Adjust long_name
+    if field == 'TREFHT':
+        data.attrs['long_name'] = 'Reference height temperature'
+    elif field == 'SHFLX':
+        data.attrs['long_name'] = 'Sensible heat flux'
+    elif field == 'TMQ':
+        data.attrs['long_name'] = 'Total precipitable water'
+
     # Adjust units if necessary
-    if field in ('TGCLDLWP', 'TGCLDIWP', 'TGCLDWP'):
+    if field in ('TMCLDLIQ', 'TMCLDICE', 'TGCLDLWP', 'TGCLDIWP', 'TGCLDWP'):
         if data.units == 'kg/m2':
             attrs = data.attrs
             data = 1e3 * data
             data.attrs = attrs
             data.attrs['units'] = 'g/m2'
-    elif field in ('CLDTOT', 'cltcalipso', 'cltcalipso_liq', 'cltcalipso_ice',
+    elif field in ('CLDTOT', 'CLDLOW', 'CLDMED', 'CLDHGH',
+                   'cltcalipso', 'cltcalipso_liq', 'cltcalipso_ice',
                    'clcalipso',  'clcalipso_liq',  'clcalipso_ice'):
         if data.units.lower() in ('1', 'fraction', 'none', '1 fraction'):
             attrs = data.attrs
@@ -350,6 +381,42 @@ def get_data(dataset, field):
     return data
 
 
+# Compute a cloud mask based on a threshold of liquid and ice water content
+def get_liq_cloud_mask(ds, threshold=1e-5):
+    cldliq = get_data(ds, 'CLDLIQ')
+    #cld_mask = cldliq.copy()
+    cld_mask = cldliq.where(cldliq > threshold).notnull()
+    cld_mask.attrs = {
+        'long_name': 'Liquid cloud mask',
+        'units': 'none',
+        'description': f'CLDLIQ > {threshold}',
+    }
+    return cld_mask
+
+
+def get_ice_cloud_mask(ds, threshold=1e-5):
+    cldice = get_data(ds, 'CLDICE')
+    cld_mask = cldice.where(cldice > threshold).notnull()
+    cld_mask.attrs = {
+        'long_name': 'Ice cloud mask',
+        'units': 'none',
+        'description': f'CLDICE > {threshold}',
+    }
+    return cld_mask
+
+
+def get_cloud_mask(ds):
+    liq_mask = get_liq_cloud_mask(ds)
+    ice_mask = get_ice_cloud_mask(ds)
+    cld_mask = (liq_mask + ice_mask) > 0 #((liq_mask > 0) | (ice_mask > 0))
+    cld_mask.attrs = {
+        'long_name': 'Cloud mask',
+        'units': 'none',
+        'description': f'{liq_mask.attrs["description"]} | {ice_mask.attrs["description"]}',
+    }
+    return cld_mask
+
+
 def can_retrieve_field(f, v):
     '''
     Check if named field can be retrieved/derived from file.
@@ -361,13 +428,24 @@ def can_retrieve_field(f, v):
         True if variable can be retrieved/derived, False otherwise.
     '''
     result = False
-    with xarray.open_mfdataset(f) as ds:
-        try: 
-            d = get_data(ds, v)
-            result = True
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        try:
+            with open_dataset(f) as ds:
+                try: 
+                    d = get_data(ds, v)
+                    result = True
+                except:
+                    result = False
         except:
             result = False
     return result
+
+
+def get_common_time_range(*datasets):
+    t1 = max(ds.time[0].values for ds in datasets)
+    t2 = min(ds.time[-1].values for ds in datasets)
+    return t1,t2
 
 
 def get_grid_name(ds, **kwargs):
@@ -383,6 +461,7 @@ def get_grid_name(ds, **kwargs):
     # grab. But this works for now.
     grid_ncol_dict = {
          384:      'ne4pg2',
+         866:      'ne4np4', 
          21600:    'ne30pg2',
          345600:   'ne120pg2',
          1572864:  'ne256pg2',
@@ -536,11 +615,12 @@ def get_area_weights(ds):
         wgt = ds.area
     else:
         # Use xarray.ufuncs to work on lazily evaluated dask arrays
-        wgt = xarray.ufuncs.cos(ds.lat * numpy.pi / 180.0)
+        y = get_data(ds, 'latitude')
+        wgt = xarray.ufuncs.cos(y * numpy.pi / 180.0)
     return wgt
 
 
-def area_average(data, weights, dims=None):
+def area_average(data, weights, dims=None, **kwargs):
     
     '''Calculate area-weighted average over dims.'''
       
@@ -558,7 +638,7 @@ def area_average(data, weights, dims=None):
     weights = weights.where(data.notnull())
     
     # Do the averaging        
-    data_mean = (weights * data).sum(dim=dims) / weights.sum(dim=dims)
+    data_mean = (weights * data).sum(dim=dims, **kwargs) / weights.sum(dim=dims, **kwargs)
     
     # Copy over attributes, which we lose in the averaging
     # calculation

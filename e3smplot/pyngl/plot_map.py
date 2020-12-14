@@ -6,6 +6,7 @@ import numpy
 import xarray
 import os
 from e3smplot.utils import nice_cntr_levels
+from e3smplot.e3sm_utils import get_data
 import dask
 
 def plot_map(wks, x, y, data, **kwargs):
@@ -15,6 +16,10 @@ def plot_map(wks, x, y, data, **kwargs):
     res.cnFillOn = True
     res.cnLinesOn = False
     res.cnFillPalette = 'MPL_viridis'
+
+    # Add cyclic point if we need to
+    if len(data.shape) == 2 and x.max() < 360:
+        data, x = ngl.add_cyclic(data, x)
 
     # If passed 2d coordinate arrays assume they represent cell vertices, 
     # otherwise assume cell centers
@@ -49,7 +54,7 @@ def main(varname, plotname, *datafiles, gridfile=None, time_index=None,
         sorted(datafiles), chunks={'time': 1},
         drop_variables=('P3_input_dim', 'P3_output_dim'),
     )
-    data = ds_data[varname]
+    data = get_data(ds_data, varname)
     if gridfile is not None:
         ds_grid = xarray.open_dataset(gridfile).rename({'grid_size': 'ncol'})
         if 'lon' in ds_grid and 'lat' in ds_grid:
