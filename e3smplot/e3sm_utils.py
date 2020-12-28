@@ -338,8 +338,8 @@ def get_data(dataset, field):
             data = get_data(dataset, 'sp')
     elif field == 'WINDSPD_10M':
         if 'u10' in dataset.variables.keys() and 'v10' in dataset.variables.keys():
-            10m_zonalwind = dataset['u10']
-            10m_meridwind = dataset['v10']
+            10m_zonalwind = get_data(dataset,'u10')
+            10m_meridwind = get_data(dataset,'v10')
             data = (10m_zonalwind**2 + 10m_meridwind**2)**0.5
             data.attrs['long_name'] = '10m wind speed'
             data.attrs['units'] = 'm/s'
