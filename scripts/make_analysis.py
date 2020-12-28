@@ -62,6 +62,7 @@ variables = (
     #'CLDTOT', 'CLDLOW', 'CLDMED', 'CLDHGH',
     'TMCLDLIQ', 'TMCLDICE',
     'SHFLX', 'TREFHT', 'TMQ',
+    'PS','WINDSPD_10M','LHFLX',
 )
 
 # Glob strings for searching for case files. For model cases, you may want to
@@ -69,10 +70,13 @@ variables = (
 # For some of the obs datasets, we have separate files for different categories
 # of fields.
 glob_strings = {
-    'ERA5': {'PRECT' : 'ERA5_surf_2020*.nc',
-             'SHFLX' : 'ERA5_surf_2020*.nc',
-             'TREFHT': 'ERA5_surf_2020*.nc',
-             'TMQ'   : 'ERA5_surf_2020*.nc',},
+    'ERA5': {'PRECT'       : 'ERA5_surf_2020*.nc',
+             'SHFLX'       : 'ERA5_surf_2020*.nc',
+             'TREFHT'      : 'ERA5_surf_2020*.nc',
+             'TMQ'         : 'ERA5_surf_2020*.nc',
+             'PS'          : 'ERA5_surf_2020*.nc',
+             'WINDSPD_10M' : 'ERA5_surf_2020*.nc',
+             'LHFLX'       : 'ERA5_surf_2020*.nc',},
     'GPM': {'PRECT' : '*.nc',},
     'CERES-SYN': {v: '*.nc' for v in variables},
     # For model-model comparisons, need to specify history tape number
