@@ -336,7 +336,23 @@ def get_data(dataset, field):
     elif field == 'T':
         if 't' in dataset.variables.keys():
             data = get_data(dataset, 't')
-
+    elif field == 'PS':
+        if 'sp' in dataset.variables.keys():
+            data = get_data(dataset, 'sp')
+    elif field == 'WINDSPD_10M':
+        if 'u10' in dataset.variables.keys() and 'v10' in dataset.variables.keys():
+            10m_zonalwind = get_data(dataset,'u10')
+            10m_meridwind = get_data(dataset,'v10')
+            data = (10m_zonalwind**2 + 10m_meridwind**2)**0.5
+            data.attrs['long_name'] = '10m wind speed'
+            data.attrs['units'] = 'm/s'
+    elif field == 'LHFLX':
+        if 'mer' in dataset.variables.keys():
+            flux_down = dataset['mer']
+            data = flux_down*-1.*2.501e6 #Scaled evap with latent heat of vaporization in shr_const_mod.F90
+            data.attrs['long_name'] = 'Latent heat flux'
+            data.attrs['units'] = 'W/m2'
+    
     # Check if we were able to find or derive the requested field
     if data is None:
         raise ValueError(f'{field} not found in dataset and no variables found to derive') 
@@ -346,8 +362,15 @@ def get_data(dataset, field):
         data.attrs['long_name'] = 'Reference height temperature'
     elif field == 'SHFLX':
         data.attrs['long_name'] = 'Sensible heat flux'
+    elif field == 'LHFLX':
+        data.attrs['long_name'] = 'Latent heat flux'
     elif field == 'TMQ':
         data.attrs['long_name'] = 'Total precipitable water'
+    elif field == 'PS':
+        data.attrs['long_name'] = 'Surface pressure'
+    elif field == 'WINDSPD_10M':
+        data.attrs['long_name'] = '10m wind speed'    
+    
 
     # Adjust units if necessary
     if field in ('TMCLDLIQ', 'TMCLDICE', 'TGCLDLWP', 'TGCLDIWP', 'TGCLDWP'):
@@ -376,6 +399,12 @@ def get_data(dataset, field):
             data = 60 * 60 * 24 * data
             data.attrs = attrs
             data.attrs['units'] = 'K/day'
+    elif field in ('PS'):
+        if data.attrs['units'].lower() == 'Pa':
+            attrs = data.attrs
+            data = 1e-2 * data
+            data.attrs = attrs
+            data.attrs['units'] = 'hPa'
         
     # Adjust long_name if necessary
     if field == 'PRECT':
