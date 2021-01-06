@@ -333,6 +333,9 @@ def get_data(dataset, field):
     elif field == 'TMQ':
         if 'tcwv' in dataset.variables.keys():
             data = get_data(dataset, 'tcwv')
+    elif field == 'T':
+        if 't' in dataset.variables.keys():
+            data = get_data(dataset, 't')
 
     # Check if we were able to find or derive the requested field
     if data is None:
