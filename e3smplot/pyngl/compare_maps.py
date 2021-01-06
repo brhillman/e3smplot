@@ -16,11 +16,6 @@ import subprocess
 import datetime
 
 
-def common_time_limits(datasets):
-    t1 = max([ds.time[0].values for ds in datasets])
-    t2 = min([ds.time[-1].values for ds in datasets])
-    return t1, t2
-
 def compute_differences(da1, da2, x1, y1, x2, y2, map_file=None):
 
     # If coordinates are not the same, then we need to regrid
@@ -106,7 +101,7 @@ def get_contour_levels(data_arrays, percentile=2, **kwargs):
 
 def main(test_files, cntl_files, varname, plotname, 
         test_name="Model", cntl_name="Obs", time_offsets=[None, None], map_file=None, test_grid=None,
-        cntl_grid=None, verbose=False, **kwargs):
+        cntl_grid=None, t1=None, t2=None, verbose=False, **kwargs):
 
     # Read data
     if verbose: print('Open datasets...'); sys.stdout.flush()
@@ -116,7 +111,9 @@ def main(test_files, cntl_files, varname, plotname,
 
     # Subset data
     if verbose: print('Subset consistent time periods...'); sys.stdout.flush()
-    t1, t2 = common_time_limits(datasets)
+    if t1 is None: t1 = max([ds.time[0].values for ds in datasets])
+    if t2 is None: t2 = min([ds.time[-1].values for ds in datasets])
+    if verbose: print('Comparing period {} to {}'.format(str(t1), str(t2))); sys.stdout.flush()
     datasets_subset = [ds.sel(time=slice(str(t1), str(t2))) for ds in datasets]
 
     # Compute time average

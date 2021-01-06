@@ -25,17 +25,19 @@ def convert_time(ds):
     return ds
 
 
-def plot_zonal_mean(lat, data, **kwargs):
+def plot_zonal_profile(lat, pressure, data, **kwargs):
     ax = pyplot.gca()
-    if (len(data.shape) == 1):
-        pl = ax.plot(lat, data, **kwargs)
-        ax.set_xlabel('Latitude')
-        ax.set_ylabel(f'{data.long_name} ({data.units})')
-    elif (len(data.shape) == 2):
-        pl = ax.contourf(data, **kwargs)
-        ax.set_xlabel('Latitude')
-        ax.set_ylabel('Vertical')
-        cb = pyplot.colorbar(pl, orientation='horizontal')
+    xname = 'lat'
+    dims = (*[d for d in data.dims if d != xname], xname)
+    pl = ax.pcolormesh(lat, pressure[::-1], data.transpose(*dims)[::-1,:], **kwargs)
+    ax.set_xlabel('Latitude')
+    ax.set_ylabel('Vertical')
+    cb = pyplot.colorbar(pl, orientation='horizontal')
+
+    pressure_units = ('hPa', 'Pa', 'mb', 'mbar', 'bar', 'millibars')
+    if any([pressure.attrs['units'].lower() == u.lower() for u in pressure_units]):
+        ax.set_ylim(ax.get_ylim()[::-1])
+
     return pl
 
 
@@ -66,40 +68,50 @@ def to_latlon(da, x, y, map_file=None):
 
         return da, x, y
 
+def get_height(data):
+    if 'lev' in data.dims:
+        height = data.lev
+    elif 'level' in data.dims:
+        height = data.level
+    else:
+        raise RuntimeError('No valid height coordinate.')
+    return height
+
 def main(files, names, vname, fig_name, maps=None,
-        time_offsets=None, **kwargs):
+        time_offsets=None, t1=None, t2=None, dpi=400, verbose=False, **kwargs):
 
     if time_offsets is None: time_offsets = [None for x in files]
     if maps is None: maps = [None for x in files]
 
     # Load datasets
     print('Load data...'); sys.stdout.flush()
-    with dask.config.set(**{'array.slicing.split_large_chunks': True}):
-        datasets = [open_dataset(f, time_offset=dt, chunks={'time': 1}) for (f, dt) in zip(files, time_offsets)]
+    #with dask.config.set(**{'array.slicing.split_large_chunks': True}):
+    datasets = [open_dataset(f, time_offset=dt, chunks={'time': 1, 'level': 1}) for (f, dt) in zip(files, time_offsets)]
 
     # Subset for overlapping time periods
-    print('Get overlapping time range...'); sys.stdout.flush()
-    t1 = max([ds.time[0].values for ds in datasets])
-    t2 = min([ds.time[-1].values for ds in datasets])
+    if verbose: print('Get overlapping time range...'); sys.stdout.flush()
+    if t1 is None: t1 = max([ds.time[0].values for ds in datasets])
+    if t2 is None: t2 = min([ds.time[-1].values for ds in datasets])
     datasets = [ds.sel(time=slice(str(t1), str(t2))) for ds in datasets]
 
     # Select (and remask) data
-    print('Select data...'); sys.stdout.flush()
+    if verbose: print('Select data...'); sys.stdout.flush()
     data_arrays = [mask_all_zero(get_data(ds, vname)) for ds in datasets]
     coords = [get_coords(ds) for ds in datasets]
     weights = [get_area_weights(ds) for ds in datasets]
 
+    # TODO: we need to interpolate to common pressure levels here
+
     # Compute time averages
-    print('Compute time averages...'); sys.stdout.flush()
+    if verbose: print('Compute time averages...'); sys.stdout.flush()
     means = [da.mean(dim='time', keep_attrs=True) for da in data_arrays]
     weights = [wgt.mean(dim='time', keep_attrs=True) if 'time' in wgt.dims else wgt for wgt in weights]
 
     # Remap data to a lat/lon grid to compute zonal means. 
-    print('Remap to lat/lon grid if needed...'); sys.stdout.flush()
-    with dask.config.set(**{'array.slicing.split_large_chunks': True}):
-        maps = [xarray.open_mfdataset(f) if f is not None else None for f in maps]
-    weights, lons, lats = zip(*[apply_map(m, f) if f is not None else m for (m, f) in zip(weights, maps)])
-    means, lons, lats = zip(*[apply_map(m, f) if f is not None else (m, m.lon, m.lat) for (m, f) in zip(means, maps)])
+    if verbose: print('Remap to lat/lon grid if needed...'); sys.stdout.flush()
+    maps = [xarray.open_dataset(f) if f is not None else None for f in maps]
+    weights = [apply_map(m, f)[0] if f is not None else m for (m, f) in zip(weights, maps)]
+    means = [apply_map(m, f)[0] if f is not None else m for (m, f) in zip(means, maps)]
     lats = [m.lat for m in means]
 
     # Compute *zonal* average. Note that this is tricky for unstructured data.
@@ -119,20 +131,21 @@ def main(files, names, vname, fig_name, maps=None,
     #else:
     #    print('Try using our slow zonal mean routine...')
     #    means, lats = zip(*[calculate_zonal_mean(d, w, y) for (d, w, y) in zip(means, weights, lats)])
-    print('Compute zonal means...'); sys.stdout.flush()
+    if verbose: print('Compute zonal means...'); sys.stdout.flush()
     weights, *__ = zip(*[xarray.broadcast(w, d) for (w, d) in zip(weights, means)])
     means = [zonal_mean(d, weights=w) for (d, w) in zip(means, weights)]
+    heights = [get_height(m) for m in means]
 
     # Make line plots of zonal averages
-    print('Make line plots of zonal means...'); sys.stdout.flush()
+    if verbose: print('Make pcolor plots of zonal means...'); sys.stdout.flush()
     figure, ax = pyplot.subplots(1, 1)
-    plots = [plot_zonal_mean(y, m, label=l, **kwargs) for (y, m, l) in zip(lats, means, names)]
+    plots = [plot_zonal_profile(x, y, m, label=l, **kwargs) for (x, y, m, l) in zip(lats, heights, means, names)]
     if len(means[0].shape) == 1:
         pyplot.legend()
-    figure.savefig(fig_name, bbox_inches='tight')
+    figure.savefig(fig_name, bbox_inches='tight', dpi=dpi)
 
     # Finally, trim whitespace from our figures
-    print('Trimming whitespace from figure...'); sys.stdout.flush()
+    if verbose: print('Trimming whitespace from figure...'); sys.stdout.flush()
     subprocess.call(f'convert -trim {fig_name} {fig_name}'.split(' '))
 
 

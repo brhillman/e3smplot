@@ -26,7 +26,8 @@ def plot_time_series(data, **kwargs):
     return pl
 
 
-def main(files, vname, fig_name, labels, time_offsets=None, verbose=False, dpi=800, **kwargs):
+def main(files, vname, fig_name, labels, operation='average', time_offsets=None,
+        dims=None, t1=None, t2=None, verbose=False, dpi=400, **kwargs):
 
     # Load datasets
     if verbose: print('Load datasets'); sys.stdout.flush()
@@ -35,8 +36,8 @@ def main(files, vname, fig_name, labels, time_offsets=None, verbose=False, dpi=8
 
     # Subset for overlapping time periods
     if verbose: print('Subset time'); sys.stdout.flush()
-    t1 = max(ds.time[0].values for ds in datasets[:1])
-    t2 = min(ds.time[-1].values for ds in datasets[:1])
+    if t1 is None: t1 = max([ds.time[0].values for ds in datasets])
+    if t2 is None: t2 = min([ds.time[-1].values for ds in datasets])
     if verbose: print('Comparing period {} to {}'.format(str(t1), str(t2))); sys.stdout.flush()
     datasets = [ds.sel(time=slice(str(t1), str(t2))) for ds in datasets]
 

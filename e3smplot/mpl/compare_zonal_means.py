@@ -61,7 +61,7 @@ def to_latlon(da, x, y, map_file=None):
         return da, x, y
 
 def main(files, names, vname, fig_name, maps=None,
-        time_offsets=None, verbose=False, dpi=800, **kwargs):
+        time_offsets=None, t1=None, t2=None, verbose=False, dpi=800, **kwargs):
 
     if time_offsets is None: time_offsets = [None for x in files]
     if maps is None: maps = [None for x in files]
@@ -73,8 +73,9 @@ def main(files, names, vname, fig_name, maps=None,
 
     # Subset for overlapping time periods, and compute time average
     if verbose: print('Get overlapping time range...'); sys.stdout.flush()
-    t1 = max([ds.time[0].values for ds in datasets])
-    t2 = min([ds.time[-1].values for ds in datasets])
+    if t1 is None: t1 = max([ds.time[0].values for ds in datasets])
+    if t2 is None: t2 = min([ds.time[-1].values for ds in datasets])
+    if verbose: print('Comparing period {} to {}'.format(str(t1), str(t2))); sys.stdout.flush()
     datasets = [ds.sel(time=slice(str(t1), str(t2))) for ds in datasets]
     if verbose: print('Compute time averages...'); sys.stdout.flush()
     datasets = [ds.mean(dim='time', keep_attrs=True) for ds in datasets]
