@@ -273,12 +273,18 @@ def get_data(dataset, field):
         data = clwp + ciwp
         data.attrs = clwp.attrs
         data.attrs['long_name'] = 'Total gridbox cloud water path'
-    elif field == 'LIQ_MASK':
-        data = get_liq_cloud_mask(dataset)
-    elif field == 'ICE_MASK':
-        data = get_ice_cloud_mask(dataset)
-    elif field == 'CLD_MASK':
-        data = get_cloud_mask(dataset)
+    elif field == 'LIQ_CLD_MASK':
+        data = get_liq_cld_mask(dataset)
+    elif field == 'ICE_CLD_MASK':
+        data = get_ice_cld_mask(dataset)
+    elif field == 'TOT_CLD_MASK':
+        data = get_tot_cld_mask(dataset)
+    elif field == 'LIQ_CLD_AREA':
+        data = get_liq_cld_area(dataset)
+    elif field == 'ICE_CLD_AREA':
+        data = get_ice_cld_area(dataset)
+    elif field == 'TOT_CLD_AREA':
+        data = get_tot_cld_area(dataset)
         
     # CALIPSO-simulated or CALIPSO-retrieved fields
     elif field == 'cltcalipso':
@@ -412,41 +418,82 @@ def get_data(dataset, field):
 
     return data
 
-
 # Compute a cloud mask based on a threshold of liquid and ice water content
-def get_liq_cloud_mask(ds, threshold=1e-5):
+def get_liq_cld_mask(ds, threshold=1e-5):
     cldliq = get_data(ds, 'CLDLIQ')
-    #cld_mask = cldliq.copy()
-    cld_mask = cldliq.where(cldliq > threshold).notnull()
+    cld_mask = (cldliq > threshold).astype(numpy.float32)
     cld_mask.attrs = {
+        'name': 'LIQ_CLD_MASK',
         'long_name': 'Liquid cloud mask',
         'units': 'none',
         'description': f'CLDLIQ > {threshold}',
     }
     return cld_mask
 
-
-def get_ice_cloud_mask(ds, threshold=1e-5):
+def get_ice_cld_mask(ds, threshold=1e-5):
     cldice = get_data(ds, 'CLDICE')
-    cld_mask = cldice.where(cldice > threshold).notnull()
+    cld_mask = (cldice > threshold).astype(numpy.float32)
     cld_mask.attrs = {
+        'name': 'ICE_CLD_MASK',
         'long_name': 'Ice cloud mask',
         'units': 'none',
         'description': f'CLDICE > {threshold}',
     }
     return cld_mask
 
-
-def get_cloud_mask(ds):
-    liq_mask = get_liq_cloud_mask(ds)
-    ice_mask = get_ice_cloud_mask(ds)
-    cld_mask = (liq_mask + ice_mask) > 0 #((liq_mask > 0) | (ice_mask > 0))
+def get_tot_cld_mask(ds):
+    liq_mask = get_liq_cld_mask(ds)
+    ice_mask = get_ice_cld_mask(ds)
+    cld_mask = ((liq_mask + ice_mask) > 0).astype(numpy.float32) #((liq_mask > 0) | (ice_mask > 0))
     cld_mask.attrs = {
+        'name': 'TOT_CLD_MASK',
         'long_name': 'Cloud mask',
         'units': 'none',
         'description': f'{liq_mask.attrs["description"]} | {ice_mask.attrs["description"]}',
     }
     return cld_mask
+
+# Vertically-projected cloud area (shadow)
+def get_liq_cld_area(ds):
+    # First get 3D cloud mask
+    cld_mask = get_liq_cld_mask(ds)
+    # Project down
+    cld_area = (cld_mask > 0).any(dim='lev').astype(numpy.float32)
+    cld_area.attrs = {
+        'name': 'LIQ_CLD_AREA',
+        'long_name': 'Liquid cloud area mask',
+        'units': 'none',
+        'description': 'any(cld_mask > 0)',
+    }
+    return cld_area
+
+# Vertically-projected cloud area (shadow)
+def get_ice_cld_area(ds):
+    # First get 3D cloud mask
+    cld_mask = get_ice_cld_mask(ds)
+    # Project down
+    cld_area = (cld_mask > 0).any(dim='lev').astype(numpy.float32)
+    cld_area.attrs = {
+        'name': 'ICE_CLD_AREA',
+        'long_name': 'Ice cloud area mask',
+        'units': 'none',
+        'description': 'any(cld_mask > 0)',
+    }
+    return cld_area
+
+# Vertically-projected cloud area (shadow)
+def get_tot_cld_area(ds):
+    # First get 3D cloud mask
+    cld_mask = get_tot_cld_mask(ds)
+    # Project down
+    cld_area = (cld_mask > 0).any(dim='lev').astype(numpy.float32)
+    cld_area.attrs = {
+        'name': 'TOT_CLD_AREA',
+        'long_name': 'Cloud area mask',
+        'units': 'none',
+        'description': 'any(cld_mask > 0)',
+    }
+    return cld_area
 
 
 def can_retrieve_field(f, v):
