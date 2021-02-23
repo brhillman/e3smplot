@@ -211,7 +211,7 @@ def update_progress(iteration, num_iterations, bar_length=10):
         status = ""
 
     # Display appropriate text to build status bar
-    text = "\rPercent: [%s] %i of %i (%.2f%%)%s"%(
+    text = "\rProgress: [%s] %i of %i (%.2f%%)%s"%(
         "#"*block + "-"*(bar_length-block),
         iteration, num_iterations,
         progress*100, status
