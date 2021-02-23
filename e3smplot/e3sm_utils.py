@@ -239,6 +239,11 @@ def get_data(dataset, field):
             data = dataset['cldarea_total_3h']
             data.attrs['long_name'] = 'Cloud area fraction'
             data.attrs['units'] = '%'
+    elif field == 'CLDHGH':
+        if 'cldarea_high_3h' in dataset.variables.keys():
+            data = dataset['cldarea_high_3h']
+            data.attrs['long_name'] = 'High-topped cloud area fraction'
+            data.attrs['units'] = '%'
     elif field == 'CLDLIQICE':
         cldliq = get_data(dataset, 'CLDLIQ')
         cldice = get_data(dataset, 'CLDICE')
@@ -342,6 +347,9 @@ def get_data(dataset, field):
     elif field == 'T':
         if 't' in dataset.variables.keys():
             data = get_data(dataset, 't')
+    elif field == 'Q':
+        if 'q' in dataset.variables.keys():
+            data = get_data(dataset, 'q')
     elif field == 'PS':
         if 'sp' in dataset.variables.keys():
             data = get_data(dataset, 'sp')
