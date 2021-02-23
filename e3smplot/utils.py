@@ -219,3 +219,32 @@ def update_progress(iteration, num_iterations, bar_length=10):
     sys.stdout.write(text)
     sys.stdout.flush()
 
+
+def interp_along_axis(xout, xin, yin, axis=0, *args, **kwargs):
+    """
+    Perform 1D interpolation along 1D slices of a ND array.
+    """
+
+    # Make sure input arrays are sized appropriately
+    assert xin.shape == yin.shape
+
+    # Setup output array
+    shape_in  = yin.shape
+    shape_out = list(shape_in)
+    shape_out[axis] = len(xout)
+    yout = numpy.empty(shape_out)
+
+    # Apply function along axis specified by looping over
+    # indices across the other axes and applying function
+    # to 1d slices; equivalent to, e.g.,
+    # for ii in yin.shape[0]:
+    #     for jj in yin.shape[1]:
+    #        for kk in yin.shape[2]:
+    #            yout[ii,jj,kk,:] = numpy.interp(xout, xin[ii,jj,kk,:], yin[ii,jj,kk,:])
+    Ni, Nk = yin.shape[:axis], yin.shape[axis+1:]
+    for ii in numpy.ndindex(Ni):
+        for kk in numpy.ndindex(Nk):
+            yout[ii + numpy.s_[...,] + kk] = numpy.interp(
+                xout, xin[ii + numpy.s_[:,] + kk], yin[ii + numpy.s_[:,] + kk], *args, **kwargs
+            )
+    return yout
