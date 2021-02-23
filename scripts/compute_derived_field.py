@@ -6,10 +6,13 @@ from e3smplot.e3sm_utils import get_data
 
 def main(vname, inputfile, outputfile, **kwargs):
 
+    # Process kwargs
+    for k, v in kwargs.items(): kwargs[k] = eval(v)
+
     # Open dataset
     ds = xarray.open_mfdataset(
         inputfile, drop_variables=('P3_input_dim', 'P3_output_dim'),
-        chunks={'time': 1, 'lev': 1}, engine='netcdf4',
+        **kwargs
     )
 
     # Compute cloud masks and save to disk
