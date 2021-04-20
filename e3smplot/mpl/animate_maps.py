@@ -40,7 +40,7 @@ def get_triangulation(lon, lat):
 
 
 def fix_longitudes(lon):
-    lon.values = numpy.where(lon > 180, lon - 360, lon)
+    lon.assign_coords(lon=numpy.where(lon > 180, lon - 360, lon))
     return lon
 
 
