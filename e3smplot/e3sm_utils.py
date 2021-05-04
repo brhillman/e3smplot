@@ -295,22 +295,22 @@ def get_data(dataset, field):
     elif field == 'CLDTOT_MISR':
         tau1, tau2 = 0.3, numpy.inf
         cth1, cth2 = -numpy.inf, numpy.inf
-        data = get_data(ds, 'CLD_MISR').sel(cosp_tau=slice(tau1, tau2), cosp_htmisr=slice(cth1, cth2)).sum(dim=('cosp_tau', 'cosp_htmisr'), keep_attrs=True)
+        data = get_data(dataset, 'CLD_MISR').sel(cosp_tau=slice(tau1, tau2), cosp_htmisr=slice(cth1, cth2)).sum(dim=('cosp_tau', 'cosp_htmisr'), keep_attrs=True)
         data.attrs['long_name'] = 'MISR-simulated total cloud area'
     elif field == 'CLDLOW_MISR':
         tau1, tau2 = 0.3, numpy.inf
         cth1, cth2 = 0, 3000
-        data = get_data(ds, 'CLD_MISR').sel(cosp_tau=slice(tau1, tau2), cosp_htmisr=slice(cth1, cth2)).sum(dim=('cosp_tau', 'cosp_htmisr'), keep_attrs=True)
+        data = get_data(dataset, 'CLD_MISR').sel(cosp_tau=slice(tau1, tau2), cosp_htmisr=slice(cth1, cth2)).sum(dim=('cosp_tau', 'cosp_htmisr'), keep_attrs=True)
         data.attrs['long_name'] = 'MISR-simulated low-topped (< 3 km) cloud area'
     elif field == 'CLDMED_MISR':
         tau1, tau2 = 0.3, numpy.inf
         cth1, cth2 = 3000, 7000
-        data = get_data(ds, 'CLD_MISR').sel(cosp_tau=slice(tau1, tau2), cosp_htmisr=slice(cth1, cth2)).sum(dim=('cosp_tau', 'cosp_htmisr'), keep_attrs=True)
+        data = get_data(dataset, 'CLD_MISR').sel(cosp_tau=slice(tau1, tau2), cosp_htmisr=slice(cth1, cth2)).sum(dim=('cosp_tau', 'cosp_htmisr'), keep_attrs=True)
         data.attrs['long_name'] = 'MISR-simulated mid-topped (3 - 7 km) cloud area'
     elif field == 'CLDHGH_MISR':
         tau1, tau2 = 0.3, numpy.inf
         cth1, cth2 = 7000, numpy.inf
-        data = get_data(ds, 'CLD_MISR').sel(cosp_tau=slice(tau1, tau2), cosp_htmisr=slice(cth1, cth2)).sum(dim=('cosp_tau', 'cosp_htmisr'), keep_attrs=True)
+        data = get_data(dataset, 'CLD_MISR').sel(cosp_tau=slice(tau1, tau2), cosp_htmisr=slice(cth1, cth2)).sum(dim=('cosp_tau', 'cosp_htmisr'), keep_attrs=True)
         data.attrs['long_name'] = 'MISR-simulated high-topped (> 7 km) cloud area'
     
     # CALIPSO-simulated or CALIPSO-retrieved fields
