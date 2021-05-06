@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
-def plot_exodus(ds, ax=None, **plot_kwargs):
+def plot_exodus(ds, ax=None, verbose=False, **plot_kwargs):
     import numpy
-    from matplotlib import pyplot
+    from matplotlib import pyplot, collections
     from cartopy import crs, feature
 
     # set up the axes and map
@@ -23,9 +23,10 @@ def plot_exodus(ds, ax=None, **plot_kwargs):
     lon = numpy.arctan2(y, x) * 180.0 / numpy.pi
     lat = numpy.arcsin(z) * 180.0 / numpy.pi
 
-    print('Number of vertices: %i'%lon.size)
-    print('Longitude range: %i to %i'%(lon.min().values, lon.max().values))
-    print('Latitude range: %i to %i'%(lat.min().values, lat.max().values))
+    if verbose:
+        print('Number of vertices: %i'%lon.size)
+        print('Longitude range: %i to %i'%(lon.min().values, lon.max().values))
+        print('Latitude range: %i to %i'%(lat.min().values, lat.max().values))
 
     # corner indices
     corner_indices = ds['connect1']
@@ -33,22 +34,12 @@ def plot_exodus(ds, ax=None, **plot_kwargs):
     if 'color' not in plot_kwargs.keys():
         plot_kwargs['color'] = 'black'
         
-    for i in range(corner_indices.shape[0]):
-        # get element corners
-        lon_corners = lon[corner_indices[i,:] - 1]
-        lat_corners = lat[corner_indices[i,:] - 1]
-
-        # map corners to projection
-        xx, yy = lon_corners.values, lat_corners.values
-        xx = tuple(xx) + (xx[0],)
-        yy = tuple(yy) + (yy[0],)
-
-        # draw element boundaries as great circles
-        for j in range(len(xx)-1):
-            pl = ax.plot(
-                [xx[j], xx[j+1]], [yy[j], yy[j+1]], 
-                transform=crs.Geodetic(), **plot_kwargs
-            )
+    # plot polygon edges as line collection; seems to be faster than using ax.plot()
+    xx = lon[corner_indices[:,:] - 1]
+    yy = lat[corner_indices[:,:] - 1]
+    lines = [[[xx[i,j], yy[i,j]] for j in range(xx.shape[1])] for i in range(xx.shape[0])]
+    line_collection = collections.LineCollection(lines, transform=crs.Geodetic(), **plot_kwargs)
+    pl = ax.add_collection(line_collection)
 
     return pl, ax
 
