@@ -1,7 +1,6 @@
 import numpy
 import xarray
 import scipy.sparse
-import sparse
 import sys
 
 ################################################################
