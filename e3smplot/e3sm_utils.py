@@ -30,7 +30,7 @@ def get_pressure(dataset, interfaces=False):
 
 def convert_time(ds):
     # Convert cftime coordinate
-    if isinstance(ds.time.values[0], cftime._cftime.DatetimeNoLeap):
+    if isinstance(ds.time.values[0], cftime._cftime.DatetimeNoLeap) or isinstance(ds.time.values[0], cftime._cftime.DatetimeJulian):
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
@@ -658,7 +658,11 @@ def get_scrip_grid(data_file, grid_root):
             # Convert exodus to scrip
             check_ret(subprocess.run(f'ConvertExodusToSCRIP --in {grid_root}/ne{grid_ne}pg{grid_pg}.g --out {grid_file}'.split(' ')))
         else:
-            # Infer grid from coordinate data
+            # Infer grid from coordinate data; make sure foo.nc does not exist or script will require user interaction
+            try:
+                os.remove(f'{grid_root}/foo.nc')
+            except:
+                pass
             check_ret(subprocess.run(f'ncks --rgr infer --rgr scrip={grid_file} {data_file} {grid_root}/foo.nc'.split(' ')))
         print('done.'); sys.stdout.flush()
 

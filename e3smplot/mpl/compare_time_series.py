@@ -32,7 +32,7 @@ def main(files, vname, fig_name, labels, operation='average', time_offsets=None,
     # Load datasets
     if verbose: print('Load datasets'); sys.stdout.flush()
     if time_offsets is None: time_offsets = [None for x in range(len(files))]
-    datasets = [open_dataset(f, time_offset=dt, chunks={'time': 1}) for f, dt in zip((files), time_offsets)]
+    datasets = [open_dataset(*f, time_offset=dt, chunks={'time': 1}) for f, dt in zip((files), time_offsets)]
 
     # Subset for overlapping time periods
     if verbose: print('Subset time'); sys.stdout.flush()
