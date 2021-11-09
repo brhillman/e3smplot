@@ -18,8 +18,7 @@ def open_files(*inputfiles):
 
 
 def fix_longitudes(lon):
-    lon.values = numpy.where(lon > 180, lon - 360, lon)
-    return lon
+    return lon.assign_coords(lon=((lon + 180) % 360) - 180) #numpy.where(lon > 180, lon - 360, lon))
 
 
 def get_data(ds, variable_name):
@@ -51,7 +50,7 @@ def plot_map(lon, lat, data, axes=None, plot_method='triangulation', nlon=360, n
         axes = pyplot.gca()
 
     # Draw coastlines on map
-    axes.coastlines(color='white')
+    axes.coastlines(color='black')
 
     # Fix longitudes so we are always working in -180 to 180 space
     lon = fix_longitudes(lon)

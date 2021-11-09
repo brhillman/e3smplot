@@ -146,24 +146,33 @@ def nice_cntr_levels(lmin, lmax, outside=True, max_steps=15, cint=None, returnLe
             return am1, ax1, cint
         
 
-def apply_map(da, map_file, template=None):
+def myprint(*args, **kwargs):
+    print(*args, **kwargs); sys.stdout.flush()
+
+
+def apply_map(da, map_file, template=None, verbose=False):
 
     # Allow for passing either a mapping file name or a xarray.Dataset
     if isinstance(map_file, xarray.Dataset):
         ds_map = map_file
     else:
+        if verbose: myprint('Open map file as xarray.Dataset object')
         ds_map = xarray.open_mfdataset(map_file)
 
     # Do the remapping
+    if verbose: myprint('Create weights as a COO matrix')
     weights = scipy.sparse.coo_matrix((ds_map['S'].values, (ds_map['row'].values-1, ds_map['col'].values-1)))
+    if verbose: myprint('Flatten data array')
     if len(da.shape) == 1:
         da_flat = da.data
     elif len(da.shape) == 2:
         da_flat = da.data.reshape([da.shape[0]*da.shape[1]])
+    if verbose: myprint('Apply weights via matrix multiply')
     da_regrid = weights.dot(da_flat)
 
     # Figure out coordinate variables and whether or not we should reshape the
     # output before returning
+    if verbose: myprint('Reshape output')
     if isinstance(template, xarray.DataArray):
         da_regrid = xarray.DataArray(
             da_regrid.reshape(template.shape), dims=template.dims, coords=template.coords,
@@ -188,6 +197,7 @@ def apply_map(da, map_file, template=None):
         y = ds_map.yc_b
 
     # Return remapped array and coordinate variables
+    if verbose: myprint('Return remapped data, x, y')
     return da_regrid, x, y
 
 

@@ -352,15 +352,12 @@ def compare_maps_diff(lon, lat, data1, data2, labels=('case 1', 'case 2'),
 
 
 def fix_longitudes(lon):
-    import numpy
-    lon.values = numpy.where(lon > 180, lon - 360, lon)
-    return lon
+    return lon.assign_coords(lon=numpy.where(lon > 180, lon - 360, lon))
 
 
 def plot_map(lon, lat, data, lon_corners=None, lat_corners=None, method='pcolor', **kwargs):
 
     # Fix longitudes
-    import numpy
     from xarray import DataArray
     new_lon = lon.copy(deep=True)
     new_lon.values = numpy.where(lon > 180, lon - 360, lon)
