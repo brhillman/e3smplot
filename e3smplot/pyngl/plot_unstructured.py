@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 
-import plac
 import ngl
 import numpy
 import xarray
 
-<<<<<<< HEAD
 def plot_unstructured(wks, xv, yv, data, **kwargs):
 
     # Set up annoying plot resources
@@ -85,4 +83,4 @@ def main(datafile, varname, gridfile=None):
 
 
 if __name__ == '__main__':
-    plac.call(main)
+    import plac; plac.call(main)
