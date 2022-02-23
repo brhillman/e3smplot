@@ -725,7 +725,9 @@ def get_coords(ds_data, ds_grid=None):
 def get_area_weights(ds):
     # Get weights; either use pre-computed or cosine(latitude) weights
     if 'area' in ds.variables.keys():
-        wgt = ds.area
+        wgt = ds['area']
+    elif 'grid_area' in ds.variables.keys():
+        wgt = ds['grid_area']
     else:
         # Use xarray.ufuncs to work on lazily evaluated dask arrays
         y = get_data(ds, 'latitude')
