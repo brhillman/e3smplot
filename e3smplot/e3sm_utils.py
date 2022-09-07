@@ -722,6 +722,41 @@ def get_coords(ds_data, ds_grid=None):
     return x, y
 
 
+def infer_mapping_root():
+    from os import uname
+    nodename = os.uname().nodename
+    if 'cori' in nodename:
+        mapping_root = '/global/cfs/cdirs/e3sm/mapping'
+    else:
+        raise RuntimeError(f'No mapping root defined for {nodename}')
+    return mapping_root
+
+
+def infer_grid_file(ds, mapping_root=None):
+    # Get mapping root where we can find grid files
+    if mapping_root is None: mapping_root = infer_mapping_root()
+    # Infer grid file name from ncol dim
+    ncol = ds.dims['ncol']
+    if   ncol == 21600:  # ne30pg2
+        grid_file = f'{mapping_root}/grids/ne30pg2_scrip_20200209.nc'
+    elif ncol == 48602:  # ne30np4
+        grid_file = f'{mapping_root}/grids/ne30np4_pentagons.091226.nc'
+    else:
+        raise RuntimeError(f"Grid with ncol = {ncol} unknown.")
+    return grid_file
+
+
+def infer_grid_coords(ds, grid_file=None, mapping_root=None):
+    if grid_file is None: grid_file = infer_grid_file(ds, mapping_root=mapping_root)
+    # Get coordinate variables from file
+    ds_grid = xarray.open_dataset(grid_file)
+    xc = ds_grid['grid_center_lon']
+    yc = ds_grid['grid_center_lat']
+    xv = ds_grid['grid_corner_lon']
+    yv = ds_grid['grid_corner_lat']
+    return xc, yc, xv, yv
+
+
 def get_area_weights(ds):
     # Get weights; either use pre-computed or cosine(latitude) weights
     if 'area' in ds.variables.keys():
