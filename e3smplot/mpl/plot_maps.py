@@ -52,6 +52,7 @@ def plot_map(lon, lat, data, axes=None, plot_method='triangulation', nlon=360, n
 
     # Draw coastlines on map
     axes.coastlines(color='black')
+    axes.set_global()
 
     # Fix longitudes so we are always working in -180 to 180 space
     lon = fix_longitudes(lon)
@@ -122,7 +123,7 @@ def main(varname, outputfile, *inputfiles, **kwargs):
     #
     # Make figure
     #
-    figure, axes = pyplot.subplots(len(inputfiles), 1, subplot_kw=dict(projection=crs.PlateCarree()))
+    figure, axes = pyplot.subplots(len(inputfiles), 1, subplot_kw=dict(projection=crs.PlateCarree(central_longitude=180)))
     for icase, (lon, lat, data) in enumerate(zip(lons, lats, data_arrays)):
         ax = figure.add_axes(axes[icase])
         pl, cb = plot_map(lon, lat, data, **kwargs)
