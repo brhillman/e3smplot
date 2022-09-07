@@ -4,9 +4,10 @@ from matplotlib import pyplot
 from matplotlib.tri import Triangulation
 from cartopy import crs
 from cartopy.util import add_cyclic_point
-from xarray import open_mfdataset
+from xarray import open_mfdataset, open_dataset
 from time import perf_counter
 from scipy.interpolate import griddata
+from e3smplot.e3sm_utils import infer_grid_file, infer_grid_coords
 
 
 def open_files(*inputfiles):
@@ -105,25 +106,26 @@ def main(varname, outputfile, *inputfiles, **kwargs):
 
     print(f'Plot {varname} to {outputfile}...')
     #
-    # Open dataset
+    # Open dataset and compute time average if needed
     #
-    ds = open_files(*inputfiles)
+    datasets = [open_dataset(f) for f in inputfiles]
     #
     # Read selected data from file
     #
-    data = get_data(ds, varname)
-    lon = get_data(ds, 'lon')
-    lat = get_data(ds, 'lat')
+    data_arrays = [get_data(ds, varname) for ds in datasets]
+    lons, lats, lon_corners, lat_corners =  zip(*[infer_grid_coords(ds) for ds in datasets])
     #
     # Reduce data
     #
-    data = data.mean(dim='time', keep_attrs=True)
+    data_arrays = [da.mean(dim='time', keep_attrs=True) for da in data_arrays]
     # TODO: apply vertical reduction here
     #
     # Make figure
     #
-    figure, axes = pyplot.subplots(1, 1, subplot_kw=dict(projection=crs.PlateCarree()))
-    pl, cb = plot_map(lon, lat, data, **kwargs)
+    figure, axes = pyplot.subplots(len(inputfiles), 1, subplot_kw=dict(projection=crs.PlateCarree()))
+    for icase, (lon, lat, data) in enumerate(zip(lons, lats, data_arrays)):
+        ax = figure.add_axes(axes[icase])
+        pl, cb = plot_map(lon, lat, data, **kwargs)
     #
     # Save figure
     #
