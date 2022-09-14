@@ -70,6 +70,7 @@ def open_dataset(*files, time_offset=None, **kwargs):
 # Define function to read specialized data from E3SM files
 def get_data(dataset, field):
     data = None
+    print(f'Looking for {field}')
     if field in dataset.variables.keys():
         data = dataset[field]
     elif field == 'TSI':
@@ -431,6 +432,22 @@ def get_data(dataset, field):
         data = get_data(dataset, 'CLDICE')
     elif field == 'qv':
         data = get_data(dataset, 'Q')
+    elif field[-4:] == '_sfc':
+        data = get_data(dataset, field[:-4])
+        if 'ilev' in data.dims:
+            data = data.isel(ilev=-1)
+        elif 'lev' in data.dims:
+            data = data.isel(lev=-1)
+        else:
+            raise RuntimeError(f'Not sure what to do with dims {data.dims}')
+    elif field[-4:] == '_toa':
+        data = get_data(dataset, field[:-4])
+        if 'ilev' in data.dims:
+            data = data.isel(ilev=0)
+        elif 'lev' in data.dims:
+            data = data.isel(lev=0)
+        else:
+            raise RuntimeError(f'Not sure what to do with dims {data.dims}')
     
     # Check if we were able to find or derive the requested field
     if data is None:
