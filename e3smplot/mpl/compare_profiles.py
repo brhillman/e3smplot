@@ -3,14 +3,19 @@ import xarray
 import numpy
 import sys
 from glob import glob
-from ..e3sm_utils import get_data, get_coords, get_area_weights, area_average
-from ..e3sm_utils import open_dataset, mask_all_zero
+from e3smplot.e3sm_utils import get_data, get_coords, get_area_weights, area_average
+from e3smplot.e3sm_utils import open_dataset, mask_all_zero
 from matplotlib import pyplot
 
 def plot_profile(d, *args, **kwargs):
-    ax = pyplot.gca()
+    if 'ax' in kwargs:
+        ax = kwargs.pop('ax')
+    else:
+        ax = pyplot.gca()
     if 'lev' in d.dims:
         z = d['lev']
+    if 'ilev' in d.dims:
+        z = d['ilev']
     elif 'level' in d.dims:
         z = d['level']
     elif 'plev' in d.dims:
@@ -18,7 +23,35 @@ def plot_profile(d, *args, **kwargs):
     else:
         raise RuntimeError(f'We cannot find a valid level coordinate in {d.dims}')
     pl = ax.plot(d, z, *args, **kwargs)
+    ax.set_ylabel(f'{z.long_name} ({z.units})')
+    # Reverse direction of axis for pressure coordinates
+    ax.set_ylim(max(ax.get_ylim()), min(ax.get_ylim()))
     return pl
+
+
+def compare_profiles(data_arrays, labels, **kwargs):
+    figure = pyplot.figure()
+    ax = figure.add_subplot(111)
+    ax_diff = ax.twiny()
+    linestyles = ('solid', 'dashed', 'dotted')
+    for ic, (d, l) in enumerate(zip(data_arrays, labels)):
+        pl = plot_profile(d, label=l, ax=ax, **kwargs) #ax.plot(d, range(len(d)), label=l, **kwargs)
+        if ic == 0:
+            d_cntl = d.copy(deep=True)
+        else:
+            d_diff = d - d_cntl
+            pl_diff = plot_profile(d_diff, label=l, ax=ax_diff, color='0.5', linestyle=linestyles[ic], **kwargs)
+    ax.set_xlabel(f'{d.long_name} ({d.units})')
+    ax.legend(loc='upper right')
+    ax_diff.set_xlabel('Difference')
+    ax_diff.legend(loc='lower left')
+
+    # Set axis colors for differences to match line color used
+    ax_diff.spines['top'].set_color('0.5')
+    ax_diff.xaxis.label.set_color('0.5')
+    ax_diff.tick_params(axis='x', colors='0.5')
+
+    return figure 
        
 
 def main(test_files, cntl_files, vname, fig_name, labels, operation='average', time_offsets=None,
