@@ -388,6 +388,49 @@ def get_data(dataset, field):
             data = flux_down*-1.*2.501e6 #Scaled evap with latent heat of vaporization in shr_const_mod.F90
             data.attrs['long_name'] = 'Latent heat flux'
             data.attrs['units'] = 'W/m2'
+    elif field == 'rad_heating_pdel':
+        if 'QRS' in dataset.variables.keys() and 'QRL' in dataset.variables.keys():
+            qrs = dataset['QRS']
+            qrl = dataset['QRL']
+            data = (qrs + qrl) * pdel
+        else:
+            raise RuntimeError('Cannot get rad_heating_pdel')
+    elif field == 'LW_flux_up':
+        data = get_data(dataset, 'FUL')
+    elif field == 'LW_flux_dn':
+        data = get_data(dataset, 'FDL')
+    elif field == 'SW_flux_up':
+        data = get_data(dataset, 'FUS')
+    elif field == 'SW_flux_dn':
+        data = get_data(dataset, 'FDS')
+    elif field == 'LW_clrsky_flux_up':
+        data = get_data(dataset, 'FULC')
+    elif field == 'LW_clrsky_flux_dn':
+        data = get_data(dataset, 'FDLC')
+    elif field == 'SW_clrsky_flux_up':
+        data = get_data(dataset, 'FUSC')
+    elif field == 'SW_clrsky_flux_dn':
+        data = get_data(dataset, 'FDSC')
+    elif field == 'in_cloud_ice_path':
+        data = 1e3 * get_data(dataset, 'ICLDIWP')
+    elif field == 'in_cloud_water_path':
+        d_tot = 1e3 * get_data(dataset, 'ICLDTWP')
+        d_ice = get_data(dataset, 'ICLDIWP')
+        data = (d_tot - d_ice)
+        data.attrs = d_tot.attrs
+        data['long_name'] = 'In-cloud water path'
+    elif field == 'eff_radius_qc':
+        data = get_data(dataset, 'REL')
+    elif field == 'eff_radius_qi':
+        data = get_data(dataset, 'REI')
+    elif field == 'cldfrac_tot':
+        data = get_data(dataset, 'CLOUD')
+    elif field == 'qc':
+        data = get_data(dataset, 'CLDLIQ')
+    elif field == 'qi':
+        data = get_data(dataset, 'CLDICE')
+    elif field == 'qv':
+        data = get_data(dataset, 'Q')
     
     # Check if we were able to find or derive the requested field
     if data is None:
