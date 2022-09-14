@@ -70,7 +70,6 @@ def open_dataset(*files, time_offset=None, **kwargs):
 # Define function to read specialized data from E3SM files
 def get_data(dataset, field):
     data = None
-    print(f'Looking for {field}')
     if field in dataset.variables.keys():
         data = dataset[field]
     elif field == 'TSI':
