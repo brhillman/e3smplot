@@ -455,6 +455,8 @@ def get_data(dataset, field):
         data = dall - dclr
         data.attrs = dall.attrs
         data.attrs['long_name'] = 'LW cloud effect on downwelling flux'
+    elif field == 'cosine_solar_zenith_angle':
+        data = get_data(dataset, 'COSZRS')
 
     # Automatically grab top or bottom by appending _toa or _sfc to field name
     elif field[-4:] == '_sfc':
@@ -852,6 +854,7 @@ def get_area_weights(ds):
         wgt = ds['grid_area']
     else:
         # Use xarray.ufuncs to work on lazily evaluated dask arrays
+        print('WARNING: no area variable found in dataset, falling back to cosine(latitude) weights!')
         y = get_data(ds, 'latitude')
         wgt = xarray.ufuncs.cos(y * numpy.pi / 180.0)
     return wgt
