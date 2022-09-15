@@ -19,7 +19,8 @@ def open_files(*inputfiles):
 
 
 def fix_longitudes(lon):
-    return lon.assign_coords(lon=((lon + 180) % 360) - 180) #numpy.where(lon > 180, lon - 360, lon))
+    #return lon.assign_coords(lon=((lon + 180) % 360) - 180) #numpy.where(lon > 180, lon - 360, lon))
+    return ((lon + 180) % 360) - 180 #numpy.where(lon > 180, lon - 360, lon))
 
 
 def get_data(ds, variable_name):
@@ -44,7 +45,7 @@ def get_data(ds, variable_name):
     return data
 
 
-def plot_map(lon, lat, data, axes=None, plot_method='triangulation', nlon=360, nlat=180, **kwargs):
+def plot_map(lon, lat, data, axes=None, plot_method='regrid', nlon=360, nlat=180, **kwargs):
 
     # Get current axes
     if axes is None:
@@ -74,7 +75,7 @@ def plot_map(lon, lat, data, axes=None, plot_method='triangulation', nlon=360, n
             data_regridded = griddata((lon, lat), data, (xi[None,:], yi[:,None]), method='nearest')
             pl = axes.pcolormesh(xi, yi, data_regridded, transform=crs.PlateCarree(), **kwargs)
         else:
-            raise ValueError('method %s not known'%method)
+            raise ValueError('method %s not known; please choose one of triangulation or regrid'%method)
     elif ('lon' in data.dims) and ('lat' in data.dims):
         # Need to add a cyclic point
         #_data, _lon = add_cyclic_point(data.transpose('lat', 'lon').values, coord=lon.values)
@@ -101,6 +102,22 @@ def plot_map(lon, lat, data, axes=None, plot_method='triangulation', nlon=360, n
 
     # Return plot and colorbar
     return pl, cb
+
+
+def plot_maps(coords, data_arrays, labels, figshape=None, figsize=None, **kwargs):
+    if figshape is None: figshape = (len(data_arrays), 1)
+    figure, axes = pyplot.subplots(*figshape, figsize=figsize, subplot_kw=dict(projection=crs.PlateCarree()))
+
+    # Get mins/maxes over all datasets
+    #vmin = min([d.min().values for d in data_arrays])
+    #vmax = max([d.max().values for d in data_arrays])
+
+    for i, (c, d, l) in enumerate(zip(coords, data_arrays, labels)):
+        ax = figure.add_axes(axes.ravel()[i])
+        pl, cb = plot_map(*c, d, **kwargs)
+        ax.set_title(l)
+
+    return figure
 
 
 def main(varname, outputfile, *inputfiles, **kwargs):
