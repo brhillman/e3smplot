@@ -45,15 +45,18 @@ def get_data(ds, variable_name):
     return data
 
 
-def plot_map(lon, lat, data, axes=None, plot_method='regrid', nlon=360, nlat=180, **kwargs):
+def plot_map(lon, lat, data, axes=None, plot_method='regrid', nlon=360, nlat=180, cb_pad=0.02, **kwargs):
 
     # Get current axes
     if axes is None:
         axes = pyplot.gca()
 
-    # Draw coastlines on map
-    axes.coastlines(color='black')
-    axes.set_global()
+    # Draw coastlines on map, only works on GeoAxes
+    try:
+        axes.coastlines(color='black')
+        axes.set_global()
+    except:
+        pass
 
     # Fix longitudes so we are always working in -180 to 180 space
     lon = fix_longitudes(lon)
@@ -67,13 +70,13 @@ def plot_map(lon, lat, data, axes=None, plot_method='regrid', nlon=360, nlat=180
             # Plot using triangulation
             pl = axes.tripcolor(
                 triangulation, data,
-                transform=crs.PlateCarree(), **kwargs
+                **kwargs
             )
         elif plot_method == 'regrid':
             xi = numpy.linspace(-180, 180, int(nlon))
             yi = numpy.linspace(-90, 90, int(nlat))
             data_regridded = griddata((lon, lat), data, (xi[None,:], yi[:,None]), method='nearest')
-            pl = axes.pcolormesh(xi, yi, data_regridded, transform=crs.PlateCarree(), **kwargs)
+            pl = axes.pcolormesh(xi, yi, data_regridded, **kwargs)
         else:
             raise ValueError('method %s not known; please choose one of triangulation or regrid'%method)
     elif ('lon' in data.dims) and ('lat' in data.dims):
@@ -81,7 +84,7 @@ def plot_map(lon, lat, data, axes=None, plot_method='regrid', nlon=360, nlat=180
         #_data, _lon = add_cyclic_point(data.transpose('lat', 'lon').values, coord=lon.values)
         pl = axes.pcolormesh(
             lon, lat, data.transpose('lat', 'lon'),
-            transform=crs.PlateCarree(), **kwargs
+            **kwargs
         )
     else:
         raise ValueError('Dimensions invalid.')
@@ -97,7 +100,7 @@ def plot_map(lon, lat, data, axes=None, plot_method='regrid', nlon=360, nlat=180
     cb = pyplot.colorbar(
         pl, ax=axes, orientation='horizontal',
         label='%s (%s)'%(data.long_name, data.units),
-        shrink=0.8, pad=0.02
+        shrink=0.8, pad=cb_pad,
     )
 
     # Return plot and colorbar
@@ -114,7 +117,7 @@ def plot_maps(coords, data_arrays, labels, figshape=None, figsize=None, **kwargs
 
     for i, (c, d, l) in enumerate(zip(coords, data_arrays, labels)):
         ax = figure.add_axes(axes.ravel()[i])
-        pl, cb = plot_map(*c, d, **kwargs)
+        pl, cb = plot_map(*c, d, transform=crs.PlateCarree(), **kwargs)
         ax.set_title(l)
 
     return figure
