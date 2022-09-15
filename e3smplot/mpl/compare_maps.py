@@ -6,10 +6,35 @@ from cartopy import crs
 from cartopy.util import add_cyclic_point
 from time import perf_counter
 from scipy.interpolate import griddata
-from .plot_maps import plot_map
-from .plot_utils import area_average
+from e3smplot.mpl.plot_maps import plot_map
+from e3smplot.plot_utils import area_average
 from e3smplot.e3sm_utils import open_dataset, get_data, get_area_weights
-from ..utils import apply_map, myprint
+from e3smplot.utils import apply_map, myprint
+
+def compare_maps(coords, data_arrays, labels, figsize=None, **kwargs):
+    
+    figure, axes = pyplot.subplots(len(data_arrays)+1, 1, figsize=figsize)
+    vmin = min([d.min().values for d in data_arrays])
+    vmax = max([d.max().values for d in data_arrays])
+    for i, ((x, y), d, l) in enumerate(zip(coords, data_arrays, labels)):
+        
+        # Plot full fields
+        ax = figure.add_axes(axes.ravel()[i])
+        pl = plot_map(x, y, d, vmin=vmin, vmax=vmax, **kwargs)
+        ax.set_title(l)
+        
+        # Plot diffs
+        if i == 0:
+            d_cntl = d.copy(deep=True)
+        else:
+            ax = figure.add_axes(axes.ravel()[-1])
+            d_diff = d - d_cntl
+            d_diff.attrs = d.attrs
+            d_diff.attrs['long_name'] = 'Difference'
+            dmax = abs(d_diff).max().values
+            pl = plot_map(x, y, d_diff, cmap='bwr', vmin=-dmax, vmax=dmax, **kwargs)
+
+    return figure
 
 
 def main(varname, outputfile, testfiles, cntlfiles, t1=None, t2=None, maps=None, percentile=5, verbose=False, **kwargs):
