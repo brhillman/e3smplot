@@ -431,6 +431,32 @@ def get_data(dataset, field):
         data = get_data(dataset, 'CLDICE')
     elif field == 'qv':
         data = get_data(dataset, 'Q')
+    elif field == 'SW_cloud_effect_up':
+        dall = get_data(dataset, 'SW_flux_up')
+        dclr = get_data(dataset, 'SW_clrsky_flux_up')
+        data = dall - dclr
+        data.attrs = dall.attrs
+        data.attrs['long_name'] = 'SW cloud effect on upwelling flux'
+    elif field == 'SW_cloud_effect_dn':
+        dall = get_data(dataset, 'SW_flux_dn')
+        dclr = get_data(dataset, 'SW_clrsky_flux_dn')
+        data = dall - dclr
+        data.attrs = dall.attrs
+        data.attrs['long_name'] = 'SW cloud effect on downwelling flux'
+    elif field == 'LW_cloud_effect_up':
+        dall = get_data(dataset, 'LW_flux_up')
+        dclr = get_data(dataset, 'LW_clrsky_flux_up')
+        data = dall - dclr
+        data.attrs = dall.attrs
+        data.attrs['long_name'] = 'LW cloud effect on upwelling flux'
+    elif field == 'LW_cloud_effect_dn':
+        dall = get_data(dataset, 'LW_flux_dn')
+        dclr = get_data(dataset, 'LW_clrsky_flux_dn')
+        data = dall - dclr
+        data.attrs = dall.attrs
+        data.attrs['long_name'] = 'LW cloud effect on downwelling flux'
+
+    # Automatically grab top or bottom by appending _toa or _sfc to field name
     elif field[-4:] == '_sfc':
         data = get_data(dataset, field[:-4])
         if 'ilev' in data.dims:
@@ -439,6 +465,7 @@ def get_data(dataset, field):
             data = data.isel(lev=-1)
         else:
             raise RuntimeError(f'Not sure what to do with dims {data.dims}')
+        data.attrs['long_name'] = data.attrs['long_name'] + ' at surface'
     elif field[-4:] == '_toa':
         data = get_data(dataset, field[:-4])
         if 'ilev' in data.dims:
@@ -447,6 +474,7 @@ def get_data(dataset, field):
             data = data.isel(lev=0)
         else:
             raise RuntimeError(f'Not sure what to do with dims {data.dims}')
+        data.attrs['long_name'] = data.attrs['long_name'] + ' at TOA'
     
     # Check if we were able to find or derive the requested field
     if data is None:
