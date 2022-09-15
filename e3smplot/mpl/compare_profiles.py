@@ -14,7 +14,7 @@ def plot_profile(d, *args, **kwargs):
         ax = pyplot.gca()
     if 'lev' in d.dims:
         z = d['lev']
-    if 'ilev' in d.dims:
+    elif 'ilev' in d.dims:
         z = d['ilev']
     elif 'level' in d.dims:
         z = d['level']
