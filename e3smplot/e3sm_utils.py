@@ -468,7 +468,7 @@ def get_data(dataset, field):
         else:
             raise RuntimeError(f'Not sure what to do with dims {data.dims}')
         data.attrs['long_name'] = data.attrs['long_name'] + ' at surface'
-    elif field[-4:] == '_toa':
+    elif field[-4:] == '_toa' or field[-4:] == '_tom':
         data = get_data(dataset, field[:-4])
         if 'ilev' in data.dims:
             data = data.isel(ilev=0)
@@ -476,7 +476,7 @@ def get_data(dataset, field):
             data = data.isel(lev=0)
         else:
             raise RuntimeError(f'Not sure what to do with dims {data.dims}')
-        data.attrs['long_name'] = data.attrs['long_name'] + ' at TOA'
+        data.attrs['long_name'] = data.attrs['long_name'] + ' at TOM'
     
     # Check if we were able to find or derive the requested field
     if data is None:
