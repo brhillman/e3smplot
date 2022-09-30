@@ -377,16 +377,16 @@ def plot_map(lon, lat, data, lon_corners=None, lat_corners=None, method='pcolor'
         data = data.squeeze().dropna('ncol')
 
         # Plot
-        if method is 'pcolor':
+        if method == 'pcolor':
             pl = ax.tripcolor(new_lon.squeeze(), lat.squeeze(), data.squeeze(), **kwargs)
-        elif method is 'contourf':
+        elif method == 'contourf':
             pl = ax.tricontourf(new_lon.squeeze(), lat.squeeze(), data.squeeze(), **kwargs)
         else:
             raise ValueError('%s not a valid plot method'%(method))
     else:
-        if method is 'pcolor':
+        if method == 'pcolor':
             pl = ax.pcolormesh(new_lon.squeeze(), lat.squeeze(), numpy.ma.masked_invalid(data.squeeze().transpose('lat', 'lon')), **kwargs)
-        elif method is 'contourf':
+        elif method == 'contourf':
             pl = ax.contourf(new_lon.squeeze(), lat.squeeze(), numpy.ma.masked_invalid(data.squeeze().transpose('lat', 'lon')), **kwargs)
         else:
             raise ValueError('%s not a valid plot method'%(method))
