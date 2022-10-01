@@ -107,9 +107,9 @@ def plot_map(lon, lat, data, axes=None, plot_method='regrid', nlon=360, nlat=180
     return pl, cb
 
 
-def plot_maps(coords, data_arrays, labels, figshape=None, figsize=None, **kwargs):
+def plot_maps(coords, data_arrays, labels, figshape=None, figsize=None, subplot_kw=None, **kwargs):
     if figshape is None: figshape = (len(data_arrays), 1)
-    figure, axes = pyplot.subplots(*figshape, figsize=figsize, subplot_kw=dict(projection=crs.PlateCarree()))
+    figure, axes = pyplot.subplots(*figshape, figsize=figsize, subplot_kw=subplot_kw)
 
     # Get mins/maxes over all datasets
     #vmin = min([d.min().values for d in data_arrays])
@@ -117,7 +117,7 @@ def plot_maps(coords, data_arrays, labels, figshape=None, figsize=None, **kwargs
 
     for i, (c, d, l) in enumerate(zip(coords, data_arrays, labels)):
         ax = figure.add_axes(axes.ravel()[i])
-        pl, cb = plot_map(*c, d, transform=crs.PlateCarree(), **kwargs)
+        pl, cb = plot_map(*c, d, **kwargs)
         ax.set_title(l)
 
     return figure
