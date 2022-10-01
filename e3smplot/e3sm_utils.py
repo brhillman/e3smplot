@@ -477,6 +477,14 @@ def get_data(dataset, field):
         else:
             raise RuntimeError(f'Not sure what to do with dims {data.dims}')
         data.attrs['long_name'] = data.attrs['long_name'] + ' at TOM'
+
+    # Look for lower case or upper case versions of variable name if we did not
+    # find with special rules above
+    if data is None:
+        if field.lower() in dataset.variables.keys():
+            data = get_data(dataset, field.lower())
+        elif field.upper() in dataset.variables.keys():
+            data = get_data(dataset, field.upper())
     
     # Check if we were able to find or derive the requested field
     if data is None:
