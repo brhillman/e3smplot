@@ -109,7 +109,10 @@ def main(varname, outputfile, testfiles, cntlfiles, t1=None, t2=None, maps=None,
     vmax = max([numpy.nanpercentile(da.values, 100-percentile) for da in data_arrays[:-1]])
     vmins = [vmin, vmin, -abs(data_arrays[-1].max().values)]
     vmaxs = [vmax, vmax,  abs(data_arrays[-1].max().values)]
-    plots = [plot_map(lons[i], lats[i], data_arrays[i], axes=axes[i], cmap=cmaps[i], vmin=vmins[i], vmax=vmaxs[i], **kwargs) for i in range(len(data_arrays))]
+    plots = [
+        plot_map(lons[i], lats[i], data_arrays[i], axes=axes[i], cmap=cmaps[i], vmin=vmins[i], vmax=vmaxs[i], transform=crs.PlateCarree(central_longitude=0), **kwargs)
+        for i in range(len(data_arrays))
+    ]
     #
     # Annotate maps
     #
