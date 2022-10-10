@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import numpy
-import xarray, xarray.ufuncs
+import xarray
 import os, os.path
 import subprocess
 import sys
@@ -349,7 +349,7 @@ def get_data(dataset, field):
     elif field == 'TREFHT':
         if 't2m' in dataset.variables.keys():
             data = get_data(dataset, 't2m')
-    elif field == 'SHFLX':
+    elif field == 'SHFLX' or field == 'surf_sens_flux':
         if 'msshf' in dataset.variables.keys():
             data = get_data(dataset, 'msshf')
             #data.values = -data.values
@@ -861,10 +861,9 @@ def get_area_weights(ds):
     elif 'grid_area' in ds.variables.keys():
         wgt = ds['grid_area']
     else:
-        # Use xarray.ufuncs to work on lazily evaluated dask arrays
         print('WARNING: no area variable found in dataset, falling back to cosine(latitude) weights!')
         y = get_data(ds, 'latitude')
-        wgt = xarray.ufuncs.cos(y * numpy.pi / 180.0)
+        wgt = numpy.cos(y * numpy.pi / 180.0)
     return wgt
 
 
