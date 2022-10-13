@@ -49,6 +49,8 @@ def main(varname, outputfile, testfiles, cntlfiles, t1=None, t2=None, maps=None,
     if verbose: myprint('Subset consistent time periods...')
     if t1 is None: t1 = max([ds.time[0].values for ds in datasets])
     if t2 is None: t2 = min([ds.time[-1].values for ds in datasets])
+    print(t1)
+    print(t2)
     if verbose: myprint('Comparing period {} to {}'.format(str(t1), str(t2)))
     datasets = [ds.sel(time=slice(str(t1), str(t2))) for ds in datasets]
     #
@@ -103,16 +105,15 @@ def main(varname, outputfile, testfiles, cntlfiles, t1=None, t2=None, maps=None,
     # Make figure
     #
     if verbose: myprint('Make plots...')
-    figure, axes = pyplot.subplots(1, 3, figsize=(15, 5), subplot_kw=dict(projection=crs.PlateCarree(central_longitude=180)))
+    figure, axes = pyplot.subplots(1, 3, figsize=(15, 5), subplot_kw=dict(projection=crs.PlateCarree(central_longitude=0.)))
     cmaps = ['viridis', 'viridis', 'RdBu_r']
     vmin = min([numpy.nanpercentile(da.values, percentile) for da in data_arrays[:-1]])
     vmax = max([numpy.nanpercentile(da.values, 100-percentile) for da in data_arrays[:-1]])
-    vmins = [vmin, vmin, -abs(data_arrays[-1].max().values)]
-    vmaxs = [vmax, vmax,  abs(data_arrays[-1].max().values)]
-    plots = [
-        plot_map(lons[i], lats[i], data_arrays[i], axes=axes[i], cmap=cmaps[i], vmin=vmins[i], vmax=vmaxs[i], transform=crs.PlateCarree(central_longitude=0), **kwargs)
-        for i in range(len(data_arrays))
-    ]
+    # use 10th and 90th percentile values and then take max of that for diff plots
+    diff_max_absolute_percentiles=numpy.max(abs(numpy.nanpercentile(data_arrays[-1].values,[percentile/2,100-(percentile/2)])))
+    vmins = [vmin, vmin, -diff_max_absolute_percentiles]
+    vmaxs = [vmax, vmax,  diff_max_absolute_percentiles]
+    plots = [plot_map(lons[i], lats[i], data_arrays[i], axes=axes[i], cmap=cmaps[i], vmin=vmins[i], vmax=vmaxs[i], **kwargs) for i in range(len(data_arrays))]
     #
     # Annotate maps
     #

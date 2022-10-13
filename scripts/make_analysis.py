@@ -17,25 +17,25 @@ import datetime
 
 # Where we keep our grids and map files. Make sure this is in scratch space,
 # these things can get quite large
-mapping_root = '/lus/theta-fs0/projects/ClimateEnergy_4/brhillman/mapdata'
+mapping_root = '/gpfs/alpine/cli115/proj-shared/terai/maps'
 
 # A short, meaningful name with which to label plots and set output filenames.
 # Does not need to match the case name of the model run, but does need to match
 # one of the data_paths keys below!
-test_case_name = 'SCREAMv0.1 DY2'
+test_case_name = 'SCREAMv1.1_firstday'
 
 # Set control case names. We will compare the test_case_name against each of these
-cntl_case_names = ('CERES-EBAF', 'CERES-SYN', 'GPM', 'ERA5',) #'ne1024 Oct9', 'CERES-SYN', 'ERA5')
+cntl_case_names = ('CERES-SYN','ERA5',) #'ne1024 Oct9', 'CERES-SYN', 'ERA5')
 
 # Period to compare
-t1, t2 = ('2020-01-20 00:00:00', '2020-03-01 00:00:00')
+t1, t2 = ('2013-10-01 00:00:00', '2013-10-02 00:00:01')
 
 # Specific time ranges for comparisons; this is OBS-dependent
 time_ranges = {
-    'CERES-EBAF': ('2020-01-20 00:00:00', '2020-03-01 00:00:00'),
-    'CERES-SYN' : ('2020-01-20 00:00:00', '2020-03-01 00:00:00'),
-    'ERA5'      : ('2020-01-20 00:00:00', '2020-03-01 00:00:00'),
-    'GPM'       : ('2020-01-20 00:00:00', '2020-03-01 00:00:00'),
+    'CERES-EBAF': ('2013-10-01 00:00:00', '2013-10-02 00:00:01'),
+    'CERES-SYN' : ('2013-10-01 00:00:00', '2013-10-02 00:00:01'),
+    'ERA5'      : ('2013-10-01 00:00:00', '2013-10-02 00:00:01'),
+    'GPM'       : ('2013-10-01 00:00:00', '2013-10-02 00:00:01'),
 }
 
 # Path were we can find netcdf files with output from the test/model case
@@ -53,11 +53,11 @@ data_paths = {
     #'ne4 rrtmg': '/global/cscratch1/sd/bhillma/e3sm_scratch/cori-knl/SMS_Ld5.ne4_ne4.FC5AV1C-L.cori-knl_intel.add-optics-outputs/run',
     #'ne4 rrtmgp': '/global/cscratch1/sd/bhillma/e3sm_scratch/cori-knl/SMS_Ld5.ne4_ne4.FC5AV1C-L.cori-knl_intel.cam-rrtmgp.add-optics-outputs/run',
     #'ne1024 Nov05': '/global/cscratch1/sd/terai/E3SM_simulations/master.ne1024pg2_r0125_oRRS18to6v3.F2010-SCREAM-HR-DYAMOND2.cori-knl_intel.1536x8x16.DY2_Nov05branch_SHOC_P3_AB_bugfix.20201105-16',
-    'SCREAMv0.1 DY2': '/lus/theta-fs0/projects/ClimateEnergy_4/ndkeen/SCREAMv010.SCREAM-DY2.ne1024pg2.bigrid.oct27.n1024a16x8.dt100.ps.shoc1.MPASSI/run',
-    'CERES-SYN'     : '/lus/theta-fs0/projects/ClimateEnergy_4/brhillman/ceres-syn',
-    'CERES-EBAF'    : '/lus/theta-fs0/projects/ClimateEnergy_4/brhillman/ceres-ebaf',
-    'ERA5'          : '/lus/theta-fs0/projects/ClimateEnergy_4/brhillman/era5',
-    'GPM'           : '/lus/theta-fs0/projects/ClimateEnergy_4/brhillman/gpm/DYAMOND2_period',
+    'SCREAMv1.1_firstday'       : '/gpfs/alpine/cli115/proj-shared/terai/SCREAMv1_output/ne1024pg2_ne1024pg2_7daySim_try2/changed_date',
+    'CERES-SYN'      : '/gpfs/alpine/cli115/proj-shared/terai/Obs_datasets/CERES',
+    #'CERES-EBAF'    : '/lus/theta-fs0/projects/ClimateEnergy_4/brhillman/ceres-ebaf',
+    'ERA5'          : '/gpfs/alpine/cli115/proj-shared/terai/Obs_datasets/ERA5',
+    #'GPM'           : '/lus/theta-fs0/projects/ClimateEnergy_4/brhillman/gpm/DYAMOND2_period',
 }
 
 # List of fields we want to make map plots for
@@ -68,13 +68,9 @@ variables = (
     #'TOT_ICLD_VISTAU', 'LIQ_ICLD_VISTAU', 'ICE_ICLD_VISTAU',
     # 
     # 2D vars
-    'FSNTOA', 'FSNTOAC', 'FLNT', 'FLNTC',
-    'PRECT', 
-    'CLDTOT', 'CLDLOW', 'CLDMED', 'CLDHGH',
-    'TMCLDLIQ', 'TMCLDICE',
-    'SHFLX', 'LHFLX', 'TREFHT', 'TMQ',
-    'PS', 'WINDSPD_10M',
-    #'PSL',
+    'SW_flux_up@tom','SW_flux_dn@tom','LW_flux_up@tom','SW_clrsky_flux_up@tom','LW_clrsky_flux_up@tom',
+    'VapWaterPath','T_2m','PRECT','ps','surf_evap','surf_sens_flux',
+    #'surf_sens_flux',#'PRECT',
 )
 
 # Glob strings for searching for case files. For model cases, you may want to
@@ -82,16 +78,22 @@ variables = (
 # For some of the obs datasets, we have separate files for different categories
 # of fields.
 glob_strings = {
-    'ERA5': {'PRECT'       : 'ERA5_surf_2020*.nc',
+    'ERA5': {#'PRECT'       : 'ERA5_surf_2020*.nc',
              'SHFLX'       : 'ERA5_surf_2020*.nc',
              'TREFHT'      : 'ERA5_surf_2020*.nc',
              'TMQ'         : 'ERA5_surf_2020*.nc',
              'PS'          : 'ERA5_surf_2020*.nc',
              'WINDSPD_10M' : 'ERA5_surf_2020*.nc',
-             'LHFLX'       : 'ERA5_surf_2020*.nc',},
-    'GPM'       : {'PRECT' : '*.nc',},
-    'CERES-SYN' : {v: f'*_20200101-20200229.nc' for v in variables},
-    'CERES-EBAF': {v: f'CERES_EBAF_Ed4.1_Subset_*.nc' for v in variables},
+             'LHFLX'       : 'ERA5_surf_2020*.nc',
+             'T_2m'             : 'ERA5_humidity_*.nc',
+             'ps'               : 'ERA5_humidity_*.nc',
+             'surf_evap'        : 'ERA5_humidity_*.nc',
+             'surf_sens_flux'   : 'ERA5_humidity_*.nc',
+             'VapWaterPath'     : 'ERA5_humidity_*.nc',
+             'PRECT'            : 'ERA5_humidity_*.nc',},
+    'GPM'       : {'PRECT' : '*.nc'},
+    'CERES-SYN' : {v: f'*.nc' for v in variables},
+    'CERES-EBAF': {v: 'CERES_EBAF_Ed4.1_Subset_*.nc' for v in variables},
     # For model-model comparisons, need to specify history tape number
     'ne1024 Oct9' : {v: '*.h1.*.nc' for v in variables},
     'ne1024 rrtmg': {v: '*.h1.*.nc' for v in variables},
@@ -105,6 +107,7 @@ glob_strings = {
     'Run 1'         : {v: '*.eam.h[0-9]*.nc' for v in variables},
     'Run 2'         : {v: 'SCREAMv0.SCREAM-DY2.ne1024pg2.20201127.eam.h[0-9]*.nc' for v in variables},
     'SCREAMv0.1 DY2': {v: '*.eam.h[0-9]*.nc' for v in variables},
+    'SCREAMv1.1_firstday'      : {v: 'rgr_output.scream.*.nc' for v in variables},
 }
 
 # Overwrite some glob strings
@@ -155,8 +158,10 @@ if do_anomalies:
 #
 if do_contour_maps:
     for vname in variables:
+        print(vname)
         # For map plots we only compare two at a time so we can look at differences
         for cntl_case_name in cntl_case_names:
+            print(cntl_case_name)
 
             # Find files and make sure we can retrieve variable
             if vname not in glob_strings[test_case_name] or vname not in glob_strings[cntl_case_name]: continue
@@ -168,7 +173,7 @@ if do_contour_maps:
 
             # Figure out what mapping files we need based on test and obs data
             if get_grid_name(test_files[0]) != get_grid_name(cntl_files[0]):
-                map_file = get_mapping_file(test_files[0], cntl_files[0], mapping_root)
+                map_file = get_mapping_file(test_files[0], cntl_files[0], mapping_root, method='nearestdtos')
             else:
                 map_file = None
 
@@ -176,12 +181,12 @@ if do_contour_maps:
 
             # Compare maps
             print(f'Making {test_case_name} vs {cntl_case_name} contour maps for {vname}...')
-            figname = f'{graphics_root}/contour_maps/{vname}_{test_case_name.replace(" ", "_")}_vs_{cntl_case_name.replace(" ", "_")}_maps.png'
+            figname = f'{graphics_root}/contour_maps/{vname}_{test_case_name.replace(" ", "_")}_vs_{cntl_case_name.replace(" ", "_")}_nearestdtos_maps.png'
             os.makedirs(os.path.dirname(figname), exist_ok=True)
             compare_maps.main(
                 vname, figname, test_files, cntl_files, 
                 maps=(map_file, None), labels=(test_case_name, cntl_case_name), 
-                verbose=False,
+                verbose=False, t1=t1, t2=t2,
             )
 
 #

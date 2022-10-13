@@ -20,7 +20,8 @@ def open_files(*inputfiles):
 
 def fix_longitudes(lon):
     #return lon.assign_coords(lon=((lon + 180) % 360) - 180) #numpy.where(lon > 180, lon - 360, lon))
-    return ((lon + 180) % 360) - 180 #numpy.where(lon > 180, lon - 360, lon))
+    numpy.where(lon > 180, lon - 360, lon)
+    return lon # crt modified ((lon + 180) % 360) - 180 #numpy.where(lon > 180, lon - 360, lon))
 
 
 def get_data(ds, variable_name):
