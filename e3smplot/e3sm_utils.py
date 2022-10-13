@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import numpy
-import xarray, xarray.ufuncs
+import xarray
 import os, os.path
 import subprocess
 import sys
@@ -118,26 +118,43 @@ def get_data(dataset, field):
         data = all_sky_flux - clear_sky_flux
         data.attrs['long_name'] = 'Net LW cloud radiative effect'
         data.attrs['units'] = all_sky_flux.attrs['units']
-    elif field == 'FSDT':
-        flux_dn = get_data(dataset, 'FDS')
-        data = flux_dn.isel(ilev=0)
-        data.attrs['long_name'] = 'Downward SW flux at top of model'
-        data.attrs['units'] = flux_dn.attrs['units']
-    elif field == 'FSUT':
-        flux_up = get_data(dataset, 'FUS')
-        data = flux_up.isel(ilev=0)
-        data.attrs['long_name'] = 'Upward SW flux at top of model'
-        data.attrs['units'] = flux_up.attrs['units']
+        
+    elif field in ['FSDT','SW_flux_dn@tom']:
+        if 'FDS' in dataset.variables.keys():
+            flux_dn = get_data(dataset, 'FDS')
+            data = flux_dn.isel(ilev=0)
+            data.attrs['long_name'] = 'Downward SW flux at top of model'
+            data.attrs['units'] = flux_dn.attrs['units']
+        elif 'adj_atmos_sw_down_all_toa_daily' in dataset.variables.keys():
+            data = dataset['adj_atmos_sw_down_all_toa_daily']
+            data.attrs['long_name'] = 'Downward SW flux at top of model'
+    elif field in ['FSUT','SW_flux_up@tom']:
+        if 'FUS' in dataset.variables.keys():
+            flux_up = get_data(dataset, 'FUS')
+            data = flux_up.isel(ilev=0)
+            data.attrs['long_name'] = 'Upward SW flux at top of model'
+            data.attrs['units'] = flux_up.attrs['units']
+        elif 'adj_atmos_sw_up_all_toa_daily' in dataset.variables.keys():
+            data = dataset['adj_atmos_sw_up_all_toa_daily']
+            data.attrs['long_name'] = 'Shortwave flux up at TOA'
     elif field == 'FLDT':
-        flux_dn = get_data(dataset, 'FDL')
-        data = flux_dn.isel(ilev=0)
-        data.attrs['long_name'] = 'Downward LW flux at top of model'
-        data.attrs['units'] = flux_dn.attrs['units']
-    elif field == 'FLUT':
-        flux_up = get_data(dataset, 'FUL')
-        data = flux_up.isel(ilev=0)
-        data.attrs['long_name'] = 'Upward LW flux at top of model'
-        data.attrs['units'] = flux_up.attrs['units']
+        if 'FDL' in dataset.variables.keys():
+            flux_dn = get_data(dataset, 'FDL')
+            data = flux_dn.isel(ilev=0)
+            data.attrs['long_name'] = 'Downward LW flux at top of model'
+            data.attrs['units'] = flux_dn.attrs['units']
+        elif 'adj_atmos_lw_down_all_toa_daily' in dataset.variables.keys():
+            data = dataset['adj_atmos_lw_up_all_toa_daily']
+            data.attrs['long_name'] = 'Downward LW flux at top of model'
+    elif field in ['FLUT','LW_flux_up@tom']:
+        if 'FUL' in dataset.variables.keys():
+            flux_up = get_data(dataset, 'FUL')
+            data = flux_up.isel(ilev=0)
+            data.attrs['long_name'] = 'Upward LW flux at top of model'
+            data.attrs['units'] = flux_up.attrs['units']
+        elif 'adj_atmos_lw_up_all_toa_daily' in dataset.variables.keys():
+            data = dataset['adj_atmos_lw_up_all_toa_daily']
+            data.attrs['long_name'] = 'Upward LW flux at top of model'
     elif field == 'FSDS':
         flux_dn = get_data(dataset, 'FDS')
         data = flux_dn.isel(ilev=-1)
@@ -163,11 +180,15 @@ def get_data(dataset, field):
         data = flux_dn.isel(ilev=0)
         data.attrs['long_name'] = 'Downward SW clearsky flux at top of model'
         data.attrs['units'] = flux_dn.attrs['units']
-    elif field == 'FSUTC':
-        flux_up = get_data(dataset, 'FUSC')
-        data = flux_up.isel(ilev=0)
-        data.attrs['long_name'] = 'Upward SW clearsky flux at top of model'
-        data.attrs['units'] = flux_up.attrs['units']
+    elif field in ['FSUTC','SW_clrsky_flux_up@tom']:
+        if 'FUSC' in dataset.variables.keys():
+            flux_up = get_data(dataset, 'FUSC')
+            data = flux_up.isel(ilev=0)
+            data.attrs['long_name'] = 'Upward SW clearsky flux at top of model'
+            data.attrs['units'] = flux_up.attrs['units']
+        elif 'adj_atmos_sw_up_clr_toa_daily' in dataset.variables.keys():
+            data = dataset['adj_atmos_sw_up_clr_toa_daily']
+            data.attrs['long_name'] = 'Upward SW clearsky flux up at TOA'
     elif field == 'FLDTC':
         flux_dn = get_data(dataset, 'FDLC')
         data = flux_dn.isel(ilev=0)
@@ -193,11 +214,15 @@ def get_data(dataset, field):
         data = flux_dn.isel(ilev=-1)
         data.attrs['long_name'] = 'Downward LW clearsky flux at surface'
         data.attrs['units'] = flux_dn.attrs['units']
-    elif field == 'FLUSC':
-        flux_up = get_data(dataset, 'FULC')
-        data = flux_up.isel(ilev=-1)
-        data.attrs['long_name'] = 'Upward LW clearsky flux at surface'
-        data.attrs['units'] = flux_up.attrs['units']
+    elif field in ['FLUSC','LW_clrsky_flux_up@tom']:
+        if 'FULC' in dataset.variables.keys():
+            flux_up = get_data(dataset, 'FULC')
+            data = flux_up.isel(ilev=-1)
+            data.attrs['long_name'] = 'Upward LW clearsky flux at surface'
+            data.attrs['units'] = flux_up.attrs['units']
+        elif 'adj_atmos_lw_up_clr_toa_daily' in dataset.variables.keys():
+            data = dataset['adj_atmos_lw_up_clr_toa_daily']
+            data.attrs['long_name'] = 'Upward LW clearsky flux up at TOA'
     elif field == 'RESTOM':
         net_sw_flux = get_data(dataset, 'FSNT')
         net_lw_flux = get_data(dataset, 'FLNT')
@@ -272,6 +297,13 @@ def get_data(dataset, field):
             data.name = 'PRECT'
             data.attrs['long_name'] = 'Total precipitation rate'
             data.attrs['units'] = 'mm/day'
+        elif 'precip_liq_surf_mass' in dataset and 'precip_ice_surf_mass' in dataset:
+            prec_liq = get_data(dataset, 'precip_liq_surf_mass')
+            prec_ice = get_data(dataset, 'precip_ice_surf_mass')
+            data = prec_liq + prec_ice
+            data.attrs = prec_liq.attrs
+            data.attrs['long_name'] = 'Total precipitation rate'
+        
     elif field == 'TGCLDWP':
         clwp = get_data(dataset, 'TGCLDLWP')
         ciwp = get_data(dataset, 'TGCLDIWP')
@@ -346,10 +378,10 @@ def get_data(dataset, field):
         data = crm_qcld + crm_qprc + crm_qv
         data.attrs = crm_qv.attrs
         data.attrs['long_name'] = 'Total CRM water (cld + prec + qv)'
-    elif field == 'TREFHT':
+    elif field in ['TREFHT','T_2m']:
         if 't2m' in dataset.variables.keys():
             data = get_data(dataset, 't2m')
-    elif field == 'SHFLX':
+    elif field in ['SHFLX','surf_sens_flux']:
         if 'msshf' in dataset.variables.keys():
             data = get_data(dataset, 'msshf')
             #data.values = -data.values
@@ -363,7 +395,7 @@ def get_data(dataset, field):
             data = get_data(dataset, 'lat')
         elif 'yc' in dataset.variables.keys():
             data = get_data(dataset, 'yc')
-    elif field == 'TMQ':
+    elif field in ['TMQ','VapWaterPath']:
         if 'tcwv' in dataset.variables.keys():
             data = get_data(dataset, 'tcwv')
     elif field == 'T':
@@ -372,7 +404,7 @@ def get_data(dataset, field):
     elif field == 'Q':
         if 'q' in dataset.variables.keys():
             data = get_data(dataset, 'q')
-    elif field == 'PS':
+    elif field in ['PS','ps']:
         if 'sp' in dataset.variables.keys():
             data = get_data(dataset, 'sp')
     elif field == 'WINDSPD_10M':
@@ -386,8 +418,14 @@ def get_data(dataset, field):
         if 'mer' in dataset.variables.keys():
             flux_down = dataset['mer']
             data = flux_down*-1.*2.501e6 #Scaled evap with latent heat of vaporization in shr_const_mod.F90
-            data.attrs['long_name'] = 'Latent heat flux'
-            data.attrs['units'] = 'W/m2'
+            data.attrs['long_name'] = 'Surface evaporation'
+            data.attrs['units'] = 'kg m^-2 s^-1'
+    elif field == 'surf_evap':
+        if 'mer' in dataset.variables.keys():
+            flux_down = dataset['mer']
+            data = flux_down*-1*3600.*24. #Scaled to be mm/d
+            data.attrs['long_name'] = 'Surface evaporation rate'
+            data.attrs['units'] = 'mm/d'
     elif field == 'rad_heating_pdel':
         if 'QRS' in dataset.variables.keys() and 'QRL' in dataset.variables.keys():
             qrs = dataset['QRS']
@@ -458,6 +496,7 @@ def get_data(dataset, field):
     elif field == 'cosine_solar_zenith_angle':
         data = get_data(dataset, 'COSZRS')
 
+
     # Automatically grab top or bottom by appending _toa or _sfc to field name
     elif field[-4:] == '_sfc':
         data = get_data(dataset, field[:-4])
@@ -493,13 +532,13 @@ def get_data(dataset, field):
     # Adjust long_name
     if field == 'TREFHT':
         data.attrs['long_name'] = 'Reference height temperature'
-    elif field == 'SHFLX':
+    elif field in ['SHFLX','surf_sens_flux']:
         data.attrs['long_name'] = 'Sensible heat flux'
     elif field == 'LHFLX':
         data.attrs['long_name'] = 'Latent heat flux'
-    elif field == 'TMQ':
+    elif field in ['TMQ','VapWaterPath']:
         data.attrs['long_name'] = 'Total precipitable water'
-    elif field == 'PS':
+    elif field in ['PS','ps']:
         data.attrs['long_name'] = 'Surface pressure'
     elif field == 'WINDSPD_10M':
         data.attrs['long_name'] = '10m wind speed'    
@@ -524,6 +563,17 @@ def get_data(dataset, field):
         if data.attrs['units'].lower() == 'm/s':
             attrs = data.attrs
             data = 60 * 60 * 24 * 1e3 * data
+            data.attrs = attrs
+            data.attrs['units'] = 'mm/day'
+        if data.attrs['units'].lower() == 'kg':
+            attrs = data.attrs
+            data = 60 * 60 * 24 / 100 *  data
+            data.attrs = attrs
+            data.attrs['units'] = 'mm/day'
+    elif field in ('surf_evap'):
+        if data.attrs['units'].lower() == 'm^-2 s^-1 kg':
+            attrs = data.attrs
+            data = 60 * 60 * 24 *  data
             data.attrs = attrs
             data.attrs['units'] = 'mm/day'
     elif field in ('QRS', 'QRSC', 'QRL', 'QRLC'):
@@ -861,10 +911,9 @@ def get_area_weights(ds):
     elif 'grid_area' in ds.variables.keys():
         wgt = ds['grid_area']
     else:
-        # Use xarray.ufuncs to work on lazily evaluated dask arrays
         print('WARNING: no area variable found in dataset, falling back to cosine(latitude) weights!')
         y = get_data(ds, 'latitude')
-        wgt = xarray.ufuncs.cos(y * numpy.pi / 180.0)
+        wgt = numpy.cos(y * numpy.pi / 180.0)
     return wgt
 
 
