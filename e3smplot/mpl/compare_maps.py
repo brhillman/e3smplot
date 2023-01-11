@@ -11,7 +11,7 @@ from e3smplot.plot_utils import area_average
 from e3smplot.e3sm_utils import open_dataset, get_data, get_area_weights
 from e3smplot.utils import apply_map, myprint
 
-def compare_maps(coords, data_arrays, labels, figsize=None, **kwargs):
+def compare_maps(coords, data_arrays, labels, figsize=None, cb_kwargs=None, **kwargs):
     
     figure, axes = pyplot.subplots(len(data_arrays)+1, 1, figsize=figsize)
     vmin = min([d.min().values for d in data_arrays])
@@ -20,7 +20,13 @@ def compare_maps(coords, data_arrays, labels, figsize=None, **kwargs):
         
         # Plot full fields
         ax = figure.add_axes(axes.ravel()[i])
-        pl = plot_map(x, y, d, vmin=vmin, vmax=vmax, **kwargs)
+        if i == 1:
+            cb_label='%s (%s)'%(d.long_name, d.units)
+            _cb_kwargs = {'label': cb_label, **cb_kwargs}
+            pl, *__ = plot_map(x, y, d, vmin=vmin, vmax=vmax, cb_kwargs=_cb_kwargs, **kwargs)
+        else:
+            pl, *__ = plot_map(x, y, d, vmin=vmin, vmax=vmax, cb_kwargs=cb_kwargs, **kwargs)
+
         ax.set_title(l)
         
         # Plot diffs
@@ -30,14 +36,17 @@ def compare_maps(coords, data_arrays, labels, figsize=None, **kwargs):
             ax = figure.add_axes(axes.ravel()[-1])
             d_diff = d - d_cntl
             d_diff.attrs = d.attrs
-            d_diff.attrs['long_name'] = 'Difference'
+            #d_diff.attrs['long_name'] = 'Difference'
             dmax = abs(d_diff).max().values
-            pl = plot_map(x, y, d_diff, cmap='bwr', vmin=-dmax, vmax=dmax, **kwargs)
+            pl = plot_map(x, y, d_diff, cmap='bwr', vmin=-dmax, vmax=dmax,
+                    cb_kwargs=cb_kwargs, **kwargs)
+            ax.set_title(f'Difference')
+    #figure.suptitle(f'{d.long_name} ({d.units})', x=0, y=0, ha='left', va='bottom')
 
     return figure
 
 
-def main(varname, outputfile, testfiles, cntlfiles, t1=None, t2=None, maps=None, percentile=5, verbose=False, **kwargs):
+def main(varname, outputfile, testfiles, cntlfiles, t_index=None, t1=None, t2=None, maps=None, percentile=5, verbose=False, **kwargs):
     #
     # Open datasets if needed (may also pass datasets directly rather than filenames)
     #
@@ -54,8 +63,12 @@ def main(varname, outputfile, testfiles, cntlfiles, t1=None, t2=None, maps=None,
     #
     # Compute time average
     #
-    if verbose: myprint('Compute time averages...')
-    datasets = [ds.mean(dim='time', keep_attrs=True) for ds in datasets]
+    if t_index is None:
+        if verbose: myprint('Compute time averages...')
+        datasets = [ds.mean(dim='time', keep_attrs=True) for ds in datasets]
+    else:
+        if verbose: myprint(f'Select time index {t_index}...')
+        datasets = [ds.isel(time=t_index) for ds in datasets]
     #
     # Read selected data from file
     # TODO: set case names
