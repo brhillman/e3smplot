@@ -45,7 +45,9 @@ def get_data(ds, variable_name):
     return data
 
 
-def plot_map(lon, lat, data, axes=None, plot_method='regrid', nlon=360, nlat=180, cb_pad=0.02, **kwargs):
+def plot_map(lon, lat, data, axes=None,
+        plot_method='regrid', nlon=360, nlat=180, draw_colorbar=True,
+        cb_kwargs={'pad': 0.02, 'shrink': 0.8, 'orientation': 'horizontal'}, **kwargs):
 
     # Get current axes
     if axes is None:
@@ -97,14 +99,16 @@ def plot_map(lon, lat, data, axes=None, plot_method='regrid', nlon=360, nlat=180
         ))
 
     # Add a colorbar
-    cb = pyplot.colorbar(
-        pl, ax=axes, orientation='horizontal',
-        label='%s (%s)'%(data.long_name, data.units),
-        shrink=0.8, pad=cb_pad,
-    )
-
+    if draw_colorbar:
+        cb = pyplot.colorbar(
+            pl, ax=axes,
+            **cb_kwargs,
+        )
+    else:
+        cb = None
     # Return plot and colorbar
     return pl, cb
+
 
 
 def plot_maps(coords, data_arrays, labels, figshape=None, figsize=None, subplot_kw=None, **kwargs):
