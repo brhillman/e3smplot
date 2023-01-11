@@ -125,9 +125,14 @@ def get_data(dataset, field):
             data = flux_dn.isel(ilev=0)
             data.attrs['long_name'] = 'Downward SW flux at top of model'
             data.attrs['units'] = flux_dn.attrs['units']
+        elif 'SOLIN' in dataset.variables.keys():
+            print(f'WARNING: using SOLIN for {field}')
+            data = get_data(dataset, 'SOLIN')
         elif 'adj_atmos_sw_down_all_toa_daily' in dataset.variables.keys():
             data = dataset['adj_atmos_sw_down_all_toa_daily']
             data.attrs['long_name'] = 'Downward SW flux at top of model'
+        elif 'mtdwswrf' in dataset.variables.keys():
+            data = get_data(dataset, 'mtdwswrf')
     elif field in ['FSUT','SW_flux_up@tom']:
         if 'FUS' in dataset.variables.keys():
             flux_up = get_data(dataset, 'FUS')
@@ -385,16 +390,24 @@ def get_data(dataset, field):
         if 'msshf' in dataset.variables.keys():
             data = get_data(dataset, 'msshf')
             #data.values = -data.values
-    elif field == 'longitude':
+    elif field == 'longitude' or field == 'lon':
         if 'lon' in dataset.variables.keys():
             data = get_data(dataset, 'lon')
+        elif 'longitude' in dataset.variables.keys():
+            data = get_data(dataset, 'longitude')
         elif 'xc' in dataset.variables.keys():
             data = get_data(dataset, 'xc')
-    elif field == 'latitude':
+        else:
+            data, y, *__ = infer_grid_coords(dataset)
+    elif field == 'latitude' or field == 'lat':
         if 'lat' in dataset.variables.keys():
             data = get_data(dataset, 'lat')
+        elif 'latitude' in dataset.variables.keys():
+            data = get_data(dataset, 'latitude')
         elif 'yc' in dataset.variables.keys():
             data = get_data(dataset, 'yc')
+        else:
+            x, data, *__ = infer_grid_coords(dataset)
     elif field in ['TMQ','VapWaterPath']:
         if 'tcwv' in dataset.variables.keys():
             data = get_data(dataset, 'tcwv')
@@ -764,7 +777,10 @@ def get_scrip_grid_ds(ds, grid_root):
             # Generate pg2 grid file
             check_ret(subprocess.run(f'GenerateVolumetricMesh --in {grid_root}/ne{grid_ne}.g --out {grid_root}/ne{grid_ne}pg{grid_pg}.g --np {grid_pg} --uniform'.split(' ')))
             # Convert exodus to scrip
-            check_ret(subprocess.run(f'ConvertExodusToSCRIP --in {grid_root}/ne{grid_ne}pg{grid_pg}.g --out {grid_file}'.split(' ')))
+            try:
+                check_ret(subprocess.run(f'ConvertExodusToSCRIP --in {grid_root}/ne{grid_ne}pg{grid_pg}.g --out {grid_file}'.split(' ')))
+            except:
+                check_ret(subprocess.run(f'ConvertMeshToSCRIP --in {grid_root}/ne{grid_ne}pg{grid_pg}.g --out {grid_file}'.split(' ')))
         else:
             # Infer grid from coordinate data; use ncks to do this, so first we
             # need to write out the coordinate data to a temporary file
@@ -803,7 +819,10 @@ def get_scrip_grid(data_file, grid_root):
             # Generate pg2 grid file
             check_ret(subprocess.run(f'GenerateVolumetricMesh --in {grid_root}/ne{grid_ne}.g --out {grid_root}/ne{grid_ne}pg{grid_pg}.g --np {grid_pg} --uniform'.split(' ')))
             # Convert exodus to scrip
-            check_ret(subprocess.run(f'ConvertExodusToSCRIP --in {grid_root}/ne{grid_ne}pg{grid_pg}.g --out {grid_file}'.split(' ')))
+            try:
+                check_ret(subprocess.run(f'ConvertExodusToSCRIP --in {grid_root}/ne{grid_ne}pg{grid_pg}.g --out {grid_file}'.split(' ')))
+            except:
+                check_ret(subprocess.run(f'ConvertMeshToSCRIP --in {grid_root}/ne{grid_ne}pg{grid_pg}.g --out {grid_file}'.split(' ')))
         else:
             # Infer grid from coordinate data; make sure foo.nc does not exist or script will require user interaction
             try:
@@ -874,6 +893,8 @@ def infer_mapping_root():
     nodename = os.uname().nodename
     if 'cori' in nodename:
         mapping_root = '/global/cfs/cdirs/e3sm/mapping'
+    elif 'olcf' in nodename:
+        mapping_root = '/gpfs/alpine/cli115/world-shared/e3sm/mapping'
     else:
         raise RuntimeError(f'No mapping root defined for {nodename}')
     return mapping_root

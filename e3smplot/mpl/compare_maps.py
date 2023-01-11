@@ -37,22 +37,23 @@ def compare_maps(coords, data_arrays, labels, figsize=None, **kwargs):
     return figure
 
 
-def main(varname, outputfile, testfiles, cntlfiles, t1=None, t2=None, maps=None, percentile=5, verbose=False, **kwargs):
+def main(varname, outputfile, testfiles, cntlfiles, t1=None, t2=None, time_offsets=None, maps=None, percentile=5, verbose=False, **kwargs):
     #
     # Open datasets if needed (may also pass datasets directly rather than filenames)
     #
     if verbose: myprint('Open datasets...')
-    datasets = [f if isinstance(f, xarray.Dataset) else open_dataset(*f) for f in (testfiles, cntlfiles)]
+    if time_offsets is None: time_offsets = [None for x in range(2)]
+    datasets = [f if isinstance(f, xarray.Dataset) else open_dataset(*f, time_offset=dt) for (f, dt) in zip((testfiles, cntlfiles), time_offsets)]
     #
     # Subset data
     #
     if verbose: myprint('Subset consistent time periods...')
     if t1 is None: t1 = max([ds.time[0].values for ds in datasets])
     if t2 is None: t2 = min([ds.time[-1].values for ds in datasets])
-    print(t1)
-    print(t2)
     if verbose: myprint('Comparing period {} to {}'.format(str(t1), str(t2)))
     datasets = [ds.sel(time=slice(str(t1), str(t2))) for ds in datasets]
+    for ds in datasets:
+        print(f'{str(ds.time[0].values)}, {str(ds.time[-1].values)}')
     #
     # Compute time average
     #
@@ -74,12 +75,11 @@ def main(varname, outputfile, testfiles, cntlfiles, t1=None, t2=None, maps=None,
     #
     # Remap if needed
     #
-    if verbose: myprint('Remap to lat/lon grid if needed...')
     if maps is not None:
+        if verbose: myprint('Remap to lat/lon grid...')
         map_datasets = [xarray.open_dataset(f) if f is not None else None for f in maps]
         area_arrays = [apply_map(m, f)[0] if f is not None else m for (m, f) in zip(area_arrays, map_datasets)]
         data_arrays = [apply_map(m, f)[0] if f is not None else m for (m, f) in zip(data_arrays, map_datasets)]
-
     # redefine lons and lats after remap
     # TODO: this is not unstructured grid-friendly
     lons = [d.lon for d in data_arrays]

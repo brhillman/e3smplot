@@ -6,7 +6,7 @@ import xarray
 import numpy
 from e3smplot.e3sm_utils import area_average, open_dataset, get_data, get_mapping_file
 from e3smplot.e3sm_utils import get_grid_name, can_retrieve_field, is_latlon
-from e3smplot.mpl import compare_maps  # TODO: replace with mpl impl
+from e3smplot.mpl import compare_maps
 from e3smplot.mpl import compare_time_series, compare_zonal_means
 import os.path
 import datetime
@@ -17,25 +17,29 @@ import datetime
 
 # Where we keep our grids and map files. Make sure this is in scratch space,
 # these things can get quite large
-mapping_root = '/gpfs/alpine/cli115/proj-shared/terai/maps'
+mapping_root = '/gpfs/alpine/cli115/proj-shared/brhillman/maps'
 
 # A short, meaningful name with which to label plots and set output filenames.
 # Does not need to match the case name of the model run, but does need to match
 # one of the data_paths keys below!
-test_case_name = 'SCREAMv1.1_firstday'
+#test_case_name = 'SCREAMv1.1_firstday'
+test_case_name = 'SCREAMv0_ne30' #'SCREAMv1_ne30' #'SCREAMv1.1_firstday'
 
 # Set control case names. We will compare the test_case_name against each of these
-cntl_case_names = ('CERES-SYN','ERA5',) #'ne1024 Oct9', 'CERES-SYN', 'ERA5')
+cntl_case_names = (
+        'CERES-SYN',
+        #'ERA5',
+    )#'ERA5',) #'ne1024 Oct9', 'CERES-SYN', 'ERA5')
 
 # Period to compare
-t1, t2 = ('2013-10-01 00:00:00', '2013-10-02 00:00:01')
+t1, t2 = ('2013-10-01 00:00:00', '2013-10-17 23:59:59')
 
 # Specific time ranges for comparisons; this is OBS-dependent
 time_ranges = {
-    'CERES-EBAF': ('2013-10-01 00:00:00', '2013-10-02 00:00:01'),
-    'CERES-SYN' : ('2013-10-01 00:00:00', '2013-10-02 00:00:01'),
-    'ERA5'      : ('2013-10-01 00:00:00', '2013-10-02 00:00:01'),
-    'GPM'       : ('2013-10-01 00:00:00', '2013-10-02 00:00:01'),
+    'CERES-EBAF': ('2013-10-01 00:00:00', '2013-10-17 23:59:59'),
+    'CERES-SYN' : ('2013-10-01 00:00:00', '2013-10-05 23:59:59'),
+    'ERA5'      : ('2013-10-01 00:00:00', '2013-10-02 23:59:59'),
+    'GPM'       : ('2013-10-01 00:00:00', '2013-10-01 23:59:59'),
 }
 
 # Path were we can find netcdf files with output from the test/model case
@@ -54,6 +58,8 @@ data_paths = {
     #'ne4 rrtmgp': '/global/cscratch1/sd/bhillma/e3sm_scratch/cori-knl/SMS_Ld5.ne4_ne4.FC5AV1C-L.cori-knl_intel.cam-rrtmgp.add-optics-outputs/run',
     #'ne1024 Nov05': '/global/cscratch1/sd/terai/E3SM_simulations/master.ne1024pg2_r0125_oRRS18to6v3.F2010-SCREAM-HR-DYAMOND2.cori-knl_intel.1536x8x16.DY2_Nov05branch_SHOC_P3_AB_bugfix.20201105-16',
     'SCREAMv1.1_firstday'       : '/gpfs/alpine/cli115/proj-shared/terai/SCREAMv1_output/ne1024pg2_ne1024pg2_7daySim_try2/changed_date',
+    'SCREAMv1_ne30': '/autofs/nccs-svm1_home1/brhillman/codes/scream/scripts/ne30pg2_ne30pg2.F2010-SCREAMv1.fix-solar-day.b526c0f4d58d3f9306b6e6193dd14da2c24e1a4f/run/',
+    'SCREAMv0_ne30': '/gpfs/alpine/cli115/proj-shared/brhillman/e3sm_scratch/SMS.ne30pg2_ne30pg2.F2010-SCREAM-LR.summit_gnu.20230109_141236_kblln5/run',
     'CERES-SYN'      : '/gpfs/alpine/cli115/proj-shared/terai/Obs_datasets/CERES',
     #'CERES-EBAF'    : '/lus/theta-fs0/projects/ClimateEnergy_4/brhillman/ceres-ebaf',
     'ERA5'          : '/gpfs/alpine/cli115/proj-shared/terai/Obs_datasets/ERA5',
@@ -68,8 +74,8 @@ variables = (
     #'TOT_ICLD_VISTAU', 'LIQ_ICLD_VISTAU', 'ICE_ICLD_VISTAU',
     # 
     # 2D vars
-    'SW_flux_up@tom','SW_flux_dn@tom','LW_flux_up@tom','SW_clrsky_flux_up@tom','LW_clrsky_flux_up@tom',
-    'VapWaterPath','T_2m','PRECT','ps','surf_evap','surf_sens_flux',
+    'SW_flux_dn@tom', #'SW_flux_dn@tom','LW_flux_up@tom','SW_clrsky_flux_up@tom','LW_clrsky_flux_up@tom',
+    #'VapWaterPath','T_2m','PRECT','ps','surf_evap','surf_sens_flux',
     #'surf_sens_flux',#'PRECT',
 )
 
@@ -90,7 +96,9 @@ glob_strings = {
              'surf_evap'        : 'ERA5_humidity_*.nc',
              'surf_sens_flux'   : 'ERA5_humidity_*.nc',
              'VapWaterPath'     : 'ERA5_humidity_*.nc',
-             'PRECT'            : 'ERA5_humidity_*.nc',},
+             'PRECT'            : 'ERA5_humidity_*.nc',
+             'SW_flux_dn@tom'   : 'ERA5_TOAradflux_20131001_20131031.nc', # ERA5_TOArad_*.nc',
+             },
     'GPM'       : {'PRECT' : '*.nc'},
     'CERES-SYN' : {v: f'*.nc' for v in variables},
     'CERES-EBAF': {v: 'CERES_EBAF_Ed4.1_Subset_*.nc' for v in variables},
@@ -107,7 +115,9 @@ glob_strings = {
     'Run 1'         : {v: '*.eam.h[0-9]*.nc' for v in variables},
     'Run 2'         : {v: 'SCREAMv0.SCREAM-DY2.ne1024pg2.20201127.eam.h[0-9]*.nc' for v in variables},
     'SCREAMv0.1 DY2': {v: '*.eam.h[0-9]*.nc' for v in variables},
-    'SCREAMv1.1_firstday'      : {v: 'rgr_output.scream.*.nc' for v in variables},
+    'SCREAMv1.1_firstday': {v: 'rgr_output.scream.*.nc' for v in variables},
+    'SCREAMv1_ne30': {v: '*.AVERAGE.2013-10-01-01800.nc' for v in variables},
+    'SCREAMv0_ne30': {v: '*.eam.h1.*.nc' for v in variables},
 }
 
 # Overwrite some glob strings
@@ -130,6 +140,8 @@ time_offsets = {c: None for c in [test_case_name, *cntl_case_names]}
 time_offsets['ne256 lamlow'] = datetime.timedelta(days=(365*2019+20))
 time_offsets['ne4 rrtmgp'] = datetime.timedelta(days=(365*2000))
 time_offsets['ne4 rrtmg'] = datetime.timedelta(days=(365*2000))
+#time_offsets['SCREAMv1_ne30'] = datetime.timedelta(weeks=52*2013)
+#time_offsets['SCREAMv0_ne30'] = datetime.timedelta(weeks=52*2013)
 
 # Where should we write the plot files?
 tmp_name = test_case_name.replace(' ', '_')
@@ -161,7 +173,7 @@ if do_contour_maps:
         print(vname)
         # For map plots we only compare two at a time so we can look at differences
         for cntl_case_name in cntl_case_names:
-            print(cntl_case_name)
+            print(f'Making {test_case_name} vs {cntl_case_name} contour maps for {vname}...')
 
             # Find files and make sure we can retrieve variable
             if vname not in glob_strings[test_case_name] or vname not in glob_strings[cntl_case_name]: continue
@@ -173,20 +185,18 @@ if do_contour_maps:
 
             # Figure out what mapping files we need based on test and obs data
             if get_grid_name(test_files[0]) != get_grid_name(cntl_files[0]):
-                map_file = get_mapping_file(test_files[0], cntl_files[0], mapping_root, method='nearestdtos')
+                map_file = get_mapping_file(test_files[0], cntl_files[0], mapping_root, method='bilin')
             else:
                 map_file = None
 
-            # Open datasets and subset?
-
             # Compare maps
-            print(f'Making {test_case_name} vs {cntl_case_name} contour maps for {vname}...')
-            figname = f'{graphics_root}/contour_maps/{vname}_{test_case_name.replace(" ", "_")}_vs_{cntl_case_name.replace(" ", "_")}_nearestdtos_maps.png'
+            figname = f'{graphics_root}/contour_maps/{vname}_{test_case_name.replace(" ", "_")}_vs_{cntl_case_name.replace(" ", "_")}_bilin.png'
             os.makedirs(os.path.dirname(figname), exist_ok=True)
             compare_maps.main(
                 vname, figname, test_files, cntl_files, 
                 maps=(map_file, None), labels=(test_case_name, cntl_case_name), 
                 verbose=False, t1=t1, t2=t2,
+                time_offsets=[time_offsets[n] for n in (test_case_name, cntl_case_name)],
             )
 
 #
