@@ -23,7 +23,10 @@ def plot_profile(d, *args, **kwargs):
     else:
         raise RuntimeError(f'We cannot find a valid level coordinate in {d.dims}')
     pl = ax.plot(d, z, *args, **kwargs)
-    ax.set_ylabel(f'{z.long_name} ({z.units})')
+    if 'hybrid level at' in z.long_name:
+        ax.set_ylabel(f'Reference level ({z.units})')
+    else:
+        ax.set_ylabel(f'{z.long_name} ({z.units})')
     # Reverse direction of axis for pressure coordinates
     ax.set_ylim(max(ax.get_ylim()), min(ax.get_ylim()))
     return pl
@@ -40,7 +43,7 @@ def compare_profiles(data_arrays, labels, **kwargs):
             d_cntl = d.copy(deep=True)
         else:
             d_diff = d - d_cntl
-            pl_diff = plot_profile(d_diff, label=l, ax=ax_diff, color='0.5', linestyle=linestyles[ic], **kwargs)
+            pl_diff = plot_profile(d_diff, label=f'{l} - {labels[0]}', ax=ax_diff, color='0.5', linestyle=linestyles[ic], **kwargs)
     ax.set_xlabel(f'{d.long_name} ({d.units})')
     ax.legend(loc='upper right')
     ax_diff.set_xlabel('Difference')
