@@ -11,11 +11,12 @@ from e3smplot.plot_utils import area_average
 from e3smplot.e3sm_utils import open_dataset, get_data, get_area_weights
 from e3smplot.utils import apply_map, myprint
 
-def compare_maps(coords, data_arrays, labels, figsize=None, **kwargs):
+def compare_maps(coords, data_arrays, labels, figshape=(3, 1), figsize=None,
+                 percentile=5, **kwargs):
     
-    figure, axes = pyplot.subplots(len(data_arrays)+1, 1, figsize=figsize)
-    vmin = min([d.min().values for d in data_arrays])
-    vmax = max([d.max().values for d in data_arrays])
+    figure, axes = pyplot.subplots(*figshape, figsize=figsize)
+    vmin = min([numpy.nanpercentile(da.values, percentile) for da in data_arrays[:-1]])
+    vmax = max([numpy.nanpercentile(da.values, 100-percentile) for da in data_arrays[:-1]])
     for i, ((x, y), d, l) in enumerate(zip(coords, data_arrays, labels)):
         
         # Plot full fields
@@ -32,7 +33,9 @@ def compare_maps(coords, data_arrays, labels, figsize=None, **kwargs):
             d_diff.attrs = d.attrs
             d_diff.attrs['long_name'] = 'Difference'
             dmax = abs(d_diff).max().values
+            dmax = numpy.nanpercentile(abs(d_diff).values, percentile)
             pl = plot_map(x, y, d_diff, cmap='bwr', vmin=-dmax, vmax=dmax, **kwargs)
+            ax.set_title('Difference')
 
     return figure
 
@@ -53,7 +56,10 @@ def main(varname, outputfile, testfiles, cntlfiles, t1=None, t2=None, time_offse
     if verbose: myprint('Comparing period {} to {}'.format(str(t1), str(t2)))
     datasets = [ds.sel(time=slice(str(t1), str(t2))) for ds in datasets]
     for ds in datasets:
-        print(f'{str(ds.time[0].values)}, {str(ds.time[-1].values)}')
+        if len(ds.time) == 0:
+            raise RuntimeError('One or more datasets have size zero')
+        else:
+            print(f'{str(ds.time[0].values)}, {str(ds.time[-1].values)}')
     #
     # Compute time average
     #
