@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 
-import plac
 import ngl
-import numpy
 import xarray
 import os
 from e3smplot.utils import nice_cntr_levels
 from e3smplot.e3sm_utils import get_data
-import dask
+
 
 def plot_map(wks, x, y, data, **kwargs):
 
@@ -50,19 +48,16 @@ def main(varname, plotname, *datafiles, gridfile=None, time_index=None,
         vmin=None, vmax=None, **kwargs):
 
     # Read data
-    ds_data = xarray.open_mfdataset(
-        sorted(datafiles), chunks={'time': 1},
-        drop_variables=('P3_input_dim', 'P3_output_dim'),
-    )
+    ds_data = xarray.open_mfdataset(sorted(datafiles))
     data = get_data(ds_data, varname)
     if gridfile is not None:
         ds_grid = xarray.open_dataset(gridfile).rename({'grid_size': 'ncol'})
-        if 'lon' in ds_grid and 'lat' in ds_grid:
-            x = ds_grid['lon']
-            y = ds_grid['lat']
-        elif 'grid_corner_lon' in ds_grid and 'grid_corner_lat' in ds_grid:
+        if 'grid_corner_lon' in ds_grid and 'grid_corner_lat' in ds_grid:
             x = ds_grid['grid_corner_lon']
             y = ds_grid['grid_corner_lat']
+        elif 'lon' in ds_grid and 'lat' in ds_grid:
+            x = ds_grid['lon']
+            y = ds_grid['lat']
         else:
             raise RuntimeError('No valid coordinates in grid file.')
     else:
@@ -105,15 +100,12 @@ def main(varname, plotname, *datafiles, gridfile=None, time_index=None,
         wks, x.values, y.values, data.values,
         mpGeophysicalLineColor='white',
         lbOrientation='horizontal', 
-        cnFillMode='RasterFill',
         cnLineLabelsOn=False, cnLinesOn=False, **kwargs
     )
 
-    ngl.destroy(wks)
-
     # Close things
-    #ngl.end()
+    ngl.end()
 
 
 if __name__ == '__main__':
-    plac.call(main)
+    import plac; plac.call(main)

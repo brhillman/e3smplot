@@ -23,19 +23,17 @@ def open_files(*inputfiles):
 
 
 def plot_frame(lon, lat, data, frame_name,
-               lat_min=None, lat_max=None, lon_min=None, lon_max=None, 
                **kwargs):
 
     # Open figure
-    wks = ngl.open_wks('png', os.path.splitext(frame_name)[0])
+    wks = ngl.open_wks(os.path.splitext(frame_name)[1][1:], os.path.splitext(frame_name)[0])
 
     # Plot data
     pl = plot_map(
-        wks, lon, lat, data,
-        #tiMainString=f'{str(data.time.values)}',
+        wks, lon.values, lat.values, data,
+        tiMainString=f'{str(data.time.values)}',
         lbOrientation='horizontal',
-        #lbTitleString='%s (%s)'%(data.long_name, data.units),
-        cnFillMode='RasterFill',
+        lbTitleString='%s (%s)'%(data.long_name, data.units),
         **kwargs
     )
 
@@ -67,37 +65,6 @@ def get_contour_levels(data_arrays, percentile=2, **kwargs):
         if 'aboutZero' not in kwargs.keys(): kwargs['aboutZero'] = (cmin < 0 and cmax > 0)
         *__, clevels = nice_cntr_levels(cmin, cmax, returnLevels=True, max_steps=13, **kwargs)
     return clevels
-
-def plot_frames(
-        dataset, variable_name, 
-        **kwargs):
-
-    lon = get_data(dataset, 'lon')
-    lat = get_data(dataset, 'lat')
-    data = get_data(dataset, variable_name) 
-    data = data.where(
-        (lon > float(kwargs['mpMinLonF'])) & (lon <= float(kwargs['mpMaxLonF'])) &
-        (lat > float(kwargs['mpMinLatF'])) & (lat <= float(kwargs['mpMaxLatF']))
-    )
-    print('Min of data:', data.min().values)
-
-    # Get data range so that all frames will be consistent
-    print('Get mins/maxes over entire dataset...'); sys.stdout.flush()
-    kwargs['cnLevels'] = get_contour_levels(data)
-    kwargs['cnLevelSelectionMode'] = 'ExplicitLevels'
-
-    # Loop over time series and make a plot for each
-    os.makedirs('tmp_frames', exist_ok=True)
-    print('Looping over %i time indices'%len(dataset.time)); sys.stdout.flush()
-    frames = []
-    for i in range(len(dataset.time)):
-        frame_name = f'tmp_frames/{variable_name}.{i}.png'
-        pl = plot_frame(lon.isel(time=i).values, lat.isel(time=i).values, data.isel(time=i).values, frame_name, **kwargs)
-        frames.append(frame_name)
-        update_progress(i, len(dataset.time), bar_length=10)
-
-    # Return list of frames
-    return frames
 
 
 def animate_frames(outputfile, frames, **kwargs):
@@ -138,67 +105,43 @@ def update_progress(iteration, num_iterations, bar_length=10):
     sys.stdout.flush()
 
 
-def main(outputfile, variable_name, *inputfiles, **kwargs):
+def main(variable_name, outputfile, gridfile, *inputfiles, **kwargs):
     import xarray
     import gc
+
     # Open files
-    #dataset = open_files(sorted(inputfiles))
-    with xarray.open_mfdataset(
-        sorted(inputfiles), drop_variables=('P3_input_dim',
-        'P3_output_dim'), chunks={'time': 1}
-    ) as ds:
+    print('Open files...'); sys.stdout.flush()
+    ds_grid = xarray.open_dataset(gridfile)
+    ds_data = xarray.open_mfdataset(*inputfiles)
 
-        # Get data
-        data = get_data(ds, variable_name)
-        lon = get_data(ds, 'lon')
-        lat = get_data(ds, 'lat')
+    # Get data
+    print('Select data...'); sys.stdout.flush()
+    data = get_data(ds_data, variable_name)
+    lon  = get_data(ds_grid, 'grid_corner_lon')
+    lat  = get_data(ds_grid, 'grid_corner_lat')
 
-        # Subset
-        data = data.where(
-            (lon > float(kwargs['mpMinLonF'])) & (lon <= float(kwargs['mpMaxLonF'])) &
-            (lat > float(kwargs['mpMinLatF'])) & (lat <= float(kwargs['mpMaxLatF']))
-        )
+    # Get mins and maxes
+    print('Get mins and maxes over dataset...'); sys.stdout.flush()
+    minval = data.min().values
+    maxval = data.max().values
+    print(f'Data range: {minval} to {maxval}')
 
-        # Get mins and maxes
-        minval = data.min().values
-        maxval = data.max().values
-        print(f'Data range: {minval} to {maxval}')
-
-        # Get contour levels
-        *__, clevels = nice_cntr_levels(minval, maxval, returnLevels=True, max_steps=13)
-        kwargs['cnLevels'] = clevels #get_contour_levels(data)
-        kwargs['cnLevelSelectionMode'] = 'ExplicitLevels'
-        print('clevels: ', kwargs['cnLevels'])
-
-        ntime = len(ds.time)
+    # Get contour levels
+    print('Get contour levels...'); sys.stdout.flush()
+    *__, clevels = nice_cntr_levels(minval, maxval, returnLevels=True, max_steps=13)
+    kwargs['cnLevels'] = clevels #get_contour_levels(data)
+    kwargs['cnLevelSelectionMode'] = 'ExplicitLevels'
 
     # Loop
-    print('Looping over %i time indices'%len(ds.time)); sys.stdout.flush()
+    ntime = len(ds_data.time)
+    print('Looping over %i time indices'%ntime); sys.stdout.flush()
     frames = []
     for i in range(ntime):
         gc.collect()
-        with xarray.open_mfdataset(
-            sorted(inputfiles), drop_variables=('P3_input_dim',
-            'P3_output_dim'), chunks={'time': 1}
-        ) as ds:
-            data = get_data(ds, variable_name).isel(time=i).values
-            lon = get_data(ds, 'lon').isel(time=i).values
-            lat = get_data(ds, 'lat').isel(time=i).values
-            plot_name = f'tmp_frames/{variable_name}.{i}.png'
-            frames.append(plot_frame(lon, lat, data, plot_name, **kwargs))
-            update_progress(i, ntime, bar_length=10)
-            del data
-            del lon
-            del lat
-
-    # Pull out keyward args
-    #animate_kw = {}
-    #for key in ('time_per_frame',):
-    #    if key in kwargs.keys():
-    #        animate_kw[key] = kwargs.pop(key)
-
-    # Plot frames
-    #frames = plot_frames(dataset, variable_name, **kwargs)
+        plot_name = f'{os.path.dirname(outputfile)}/tmp_frames/{variable_name}.{i}.png'
+        os.makedirs(os.path.dirname(plot_name), exist_ok=True)
+        frames.append(plot_frame(lon, lat, data.isel(time=i), plot_name, **kwargs))
+        update_progress(i, ntime, bar_length=10)
 
     # Stitch together frames into single animation
     animate_frames(outputfile, frames, **animate_kw)
