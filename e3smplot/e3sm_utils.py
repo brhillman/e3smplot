@@ -131,6 +131,10 @@ def get_data(dataset, field):
         elif 'adj_atmos_sw_down_all_toa_daily' in dataset.variables.keys():
             data = dataset['adj_atmos_sw_down_all_toa_daily']
             data.attrs['long_name'] = 'Downward SW flux at top of model'
+        elif 'toa_solar_all_mon' in dataset.variables.keys():
+            data = get_data(dataset, 'toa_solar_all_mon')
+        elif 'toa_solar_all_daily' in dataset.variables.keys():
+            data = get_data(dataset, 'toa_solar_all_daily')
         elif 'mtdwswrf' in dataset.variables.keys():
             data = get_data(dataset, 'mtdwswrf')
     elif field in ['FSUT','SW_flux_up@tom']:
