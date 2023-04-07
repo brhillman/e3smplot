@@ -106,17 +106,17 @@ def get_data(dataset, field):
         data = flux_up - flux_dn
         data.attrs['long_name'] = 'Net clearky LW flux'
         data.attrs['units'] = flux_up.attrs['units']
-    elif field == 'CRESW':
+    elif field == 'CRESW' or field == 'SW_cloud_radiative_effect':
         clear_sky_flux = get_data(dataset, 'FNSC')
         all_sky_flux = get_data(dataset, 'FNS')
         data = all_sky_flux - clear_sky_flux
-        data.attrs['long_name'] = 'Net SW cloud radiative effect'
+        data.attrs['long_name'] = 'SW cloud radiative effect'
         data.attrs['units'] = all_sky_flux.attrs['units']
-    elif field == 'CRELW':
+    elif field == 'CRELW' or field == 'LW_cloud_radiative_effect':
         clear_sky_flux = get_data(dataset, 'FNLC')
         all_sky_flux = get_data(dataset, 'FNL')
         data = all_sky_flux - clear_sky_flux
-        data.attrs['long_name'] = 'Net LW cloud radiative effect'
+        data.attrs['long_name'] = 'LW cloud radiative effect'
         data.attrs['units'] = all_sky_flux.attrs['units']
         
     elif field in ['FSDT','SW_flux_dn@tom']:
@@ -466,6 +466,22 @@ def get_data(dataset, field):
         data = get_data(dataset, 'FUSC')
     elif field == 'SW_clrsky_flux_dn':
         data = get_data(dataset, 'FDSC')
+    elif field == 'FUL':
+        data = get_data(dataset, 'LW_flux_up')
+    elif field == 'FDL':
+        data = get_data(dataset, 'LW_flux_dn')
+    elif field == 'FULC':
+        data = get_data(dataset, 'LW_clrsky_flux_up')
+    elif field == 'FDLC':
+        data = get_data(dataset, 'LW_clrsky_flux_dn')
+    elif field == 'FUS':
+        data = get_data(dataset, 'SW_flux_up')
+    elif field == 'FDS':
+        data = get_data(dataset, 'SW_flux_dn')
+    elif field == 'FUSC':
+        data = get_data(dataset, 'SW_clrsky_flux_up')
+    elif field == 'FDSC':
+        data = get_data(dataset, 'SW_clrsky_flux_dn')
     elif field == 'in_cloud_ice_path':
         data = 1e3 * get_data(dataset, 'ICLDIWP')
     elif field == 'in_cloud_water_path':
@@ -512,6 +528,25 @@ def get_data(dataset, field):
         data.attrs['long_name'] = 'LW cloud effect on downwelling flux'
     elif field == 'cosine_solar_zenith_angle':
         data = get_data(dataset, 'COSZRS')
+    # Net SWCRE and LWCREW
+    elif field.lower() == 'sw_flux_net':
+        sw_flux_up = get_data(dataset, 'SW_flux_up')
+        sw_flux_dn = get_data(dataset, 'SW_flux_dn')
+        data = sw_flux_dn - sw_flux_up
+        data.attrs = sw_flux_up.attrs
+        data.attrs['long_name'] = 'SW flux net'
+    elif field.lower() == 'sw_clrsky_flux_net':
+        sw_clrsky_flux_up = get_data(dataset, 'SW_clrsky_flux_up')
+        sw_clrsky_flux_dn = get_data(dataset, 'SW_clrsky_flux_dn')
+        data = sw_clrsky_flux_dn - sw_clrsky_flux_up
+        data.attrs = sw_clrsky_flux_up.attrs
+        data.attrs['long_name'] = 'SW clrsky flux net'
+    elif field.lower() == 'sw_cloud_radiative_effect':
+        SW_flux_net = get_data(dataset, 'SW_flux_net')
+        SW_clrsky_flux_net = get_data(dataset, 'SW_clrsky_flux_net')
+        data = SW_flux_net - SW_clrsky_flux_net
+        data.attrs = SW_flux_net.attrs
+        data.attrs['long_name'] = 'SW CRE'
 
 
     # Automatically grab top or bottom by appending _toa or _sfc to field name
@@ -606,6 +641,10 @@ def get_data(dataset, field):
             data.attrs = attrs
             data.attrs['units'] = 'hPa'
         
+    # Units we know are wrong because EAMxx always tries to reduce to
+    # fundamental units
+    if data.attrs['units'] == 's^-3 kg':
+        data.attrs['units'] = 'W/m$^2$'
     # Adjust long_name if necessary
     if field == 'PRECT':
         data.attrs['long_name'] = 'Total precipitation rate'
