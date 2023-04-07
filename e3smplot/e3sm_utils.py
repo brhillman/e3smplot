@@ -156,6 +156,8 @@ def get_data(dataset, field):
             data = dataset['adj_atmos_lw_up_all_toa_daily']
             data.attrs['long_name'] = 'Downward LW flux at top of model'
     elif field in ['FLUT','LW_flux_up@tom']:
+        if 'LW_flux_up' in dataset.variables.keys():
+            data = get_data(dataset, 'LW_flux_up').isel(ilev=0)
         if 'FUL' in dataset.variables.keys():
             flux_up = get_data(dataset, 'FUL')
             data = flux_up.isel(ilev=0)
@@ -550,7 +552,7 @@ def get_data(dataset, field):
 
 
     # Automatically grab top or bottom by appending _toa or _sfc to field name
-    elif field[-4:] == '_sfc':
+    elif field[-4:] in ('_sfc', '@sfc'):
         data = get_data(dataset, field[:-4])
         if 'ilev' in data.dims:
             data = data.isel(ilev=-1)
@@ -559,7 +561,7 @@ def get_data(dataset, field):
         else:
             raise RuntimeError(f'Not sure what to do with dims {data.dims}')
         data.attrs['long_name'] = data.attrs['long_name'] + ' at surface'
-    elif field[-4:] == '_toa' or field[-4:] == '_tom':
+    elif field[-4:] in ('_toa', '_tom', '@toa', '@tom'):
         data = get_data(dataset, field[:-4])
         if 'ilev' in data.dims:
             data = data.isel(ilev=0)
