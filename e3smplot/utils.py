@@ -161,7 +161,9 @@ def apply_map(da, map_file, template=None, verbose=False):
 
     # Do the remapping
     if verbose: myprint('Create weights as a COO matrix')
-    weights = scipy.sparse.coo_matrix((ds_map['S'].values, (ds_map['row'].values-1, ds_map['col'].values-1)))
+    weights = scipy.sparse.coo_matrix(
+            (ds_map['S'].values, (ds_map['row'].values-1, ds_map['col'].values-1)),
+            shape=[ds_map.dims['n_b'], ds_map.dims['n_a']])
     if verbose: myprint('Flatten data array')
     if len(da.shape) == 1:
         da_flat = da.data
