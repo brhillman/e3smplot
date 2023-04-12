@@ -17,9 +17,19 @@ def increase_workspace_memory(value=10000000000):
 # Plot a georeferenced RGB image
 # Inspired by:
 #  https://www.dkrz.de/up/services/analysis/visualization/sw/ncl/examples/source_code/dkrz-ncl-jpeg-images-as-background-map-overlayed-by-clouds-example
+# NOTE: requires a georeferenced image converted to netcdf format, which can be
+# done using gdal:
+#
+#     gdal_translate -if Int16 -of netcdf land_shallow_topo_2048.jpg land_shallow_topo_2048.nc
+#
+# where land_shallow_topo_2048.jpg is a blue marble jpg. See NCL documentation
+# for more details:
+#
+#     https://www.ncl.ucar.edu/Applications/topo.shtml
+#     https://www.ncl.ucar.edu/Applications/rgbacolor.shtml#ex9
+#
 def plot_image_gdal(
         wks, band1, band2, band3, 
-        lat1=-90, lat2=90, lon1=0, lon2=360,
         **kwargs):
 
     # Clip if over maximum
@@ -41,8 +51,8 @@ def plot_image_gdal(
     blues[:,3]    = 0.0 #0.3077
 
     # Generate coordinate variables since they do not exist in the data
-    y = ngl.fspan(-90, 90, band1.shape[0])
-    x = ngl.fspan(0, 360, band1.shape[1])
+    y = ngl.fspan(-90,   90, band1.shape[0])
+    x = ngl.fspan(-180, 180, band1.shape[1])
 
     # Set up plot resources
     mapres = ngl.Resources()
@@ -66,12 +76,6 @@ def plot_image_gdal(
     # with kwargs passed into this function
     mapres.mpFillOn         = False
     mapres.mpGridAndLimbOn  = False
-    mapres.mpProjection     = "Orthographic"
-    mapres.mpLimitMode      = "LatLon"
-    mapres.mpMinLatF        = lat1
-    mapres.mpMaxLatF        = lat2
-    mapres.mpMinLonF        = lon1
-    mapres.mpMaxLonF        = lon2
     # Set additional plot resource passed via kwargs
     for key, value in kwargs.items(): setattr(mapres, key, value)
 
@@ -87,6 +91,11 @@ def plot_image_gdal(
 
     mapres.cnFillColors = blues
     blueMap  = ngl.contour_map(wks,band3,mapres)
+
+    #map_plot = redMap
+    #ngl.overlay(map_plot, redMap)
+    #ngl.overlay(map_plot, greenMap)
+    #ngl.overlay(map_plot, blueMap)
 
     # Return plot objects
     return redMap, greenMap, blueMap
@@ -113,7 +122,7 @@ def main(inputfile, outputfile, **kwargs):
     # Plot image
     # mpCenterLonF=150 for Pacific; 340 for Atlantic; 200 Pacific v2
     # mpCenterLatF=30 for Pacific; 45 for Atlantic; 40 Pacific v2
-    pl = plot_image_gdal(wks, band1, band2, band3, mpCenterLonF=340, mpCenterLatF=45)
+    pl = plot_image_gdal(wks, band1, band2, band3, **kwargs) #, mpCenterLonF=340, mpCenterLatF=45)
 
     # Finalize plot
     ngl.frame(wks)
