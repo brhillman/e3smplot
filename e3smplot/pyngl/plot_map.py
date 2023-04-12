@@ -7,13 +7,13 @@ from e3smplot.utils import nice_cntr_levels
 from e3smplot.e3sm_utils import get_data
 
 
-def plot_map(wks, x, y, data, **kwargs):
+def plot_map(wks, x, y, data, ngl_function=ngl.contour_map, **kwargs):
 
-    # Set up annoying plot resources
-    res = ngl.Resources()
-    res.cnFillOn = True
-    res.cnLinesOn = False
-    res.cnFillPalette = 'MPL_viridis'
+    # Set up default plot resources as dict to allow overriding via kwargs
+    resDict = dict(
+        cnFillOn=True, cnLinesOn=False, cnFillPalette='MPL_viridis',
+        mpGridAndLimbOn=False, mpPerimOn=False,
+    )
 
     # Add cyclic point if we need to
     if len(data.shape) == 2 and x.max() < 360:
@@ -22,33 +22,33 @@ def plot_map(wks, x, y, data, **kwargs):
     # If passed 2d coordinate arrays assume they represent cell vertices, 
     # otherwise assume cell centers
     if len(x.shape) == 2:
-        res.cnFillMode = 'CellFill'
-        res.sfXCellBounds = x
-        res.sfYCellBounds = y
+        resDict['cnFillMode'] = 'CellFill'
+        resDict['sfXCellBounds'] = x
+        resDict['sfYCellBounds'] = y
     else:
-        res.cnFillMode = 'RasterFill'
-        res.sfXArray = x
-        res.sfYArray = y
-
-    # Tweak plot appearance
-    res.mpGridAndLimbOn = False
-    res.mpPerimOn = False
+        resDict['cnFillMode'] = 'RasterFill'
+        resDict['sfXArray'] = x
+        resDict['sfYArray'] = y
 
     # Additional options passed via kwargs
-    for key, val in kwargs.items():
-        setattr(res, key, val)
+    for key, val in kwargs.items(): resDict[key] = val
+
+    # Set up plot resources for call to ngl functions
+    res = ngl.Resources()
+    for key, val in resDict.items(): setattr(res, key, val)
 
     # Make the plot
-    plot = ngl.contour_map(wks, data, res)
+    plot = ngl_function(wks, data, res)
 
     return plot
 
 
-def main(varname, plotname, *datafiles, gridfile=None, time_index=None,
-        vmin=None, vmax=None, **kwargs):
+def main(varname, plotname, *datafiles, gridfile=None,
+         time_index=None, time_value=None,
+         vmin=None, vmax=None, ncontours=13, **kwargs):
 
     # Read data
-    ds_data = xarray.open_mfdataset(sorted(datafiles))
+    ds_data = xarray.open_mfdataset(datafiles)
     data = get_data(ds_data, varname)
     if gridfile is not None:
         ds_grid = xarray.open_dataset(gridfile).rename({'grid_size': 'ncol'})
@@ -66,10 +66,12 @@ def main(varname, plotname, *datafiles, gridfile=None, time_index=None,
 
     # Make sure we don't have time or level dimensions
     if 'time' in data.dims:
-        if time_index is None:
-            data = data.mean(dim='time', keep_attrs=True).squeeze()
-        else:
+        if time_value is not None:
+            data = data.sel(time=time_value)
+        elif time_index is not None:
             data = data.isel(time=int(time_index))
+        else:
+            data = data.mean(dim='time', keep_attrs=True).squeeze()
     if 'lev' in data.dims:
         data = data.isel(lev=-1).squeeze()
     if 'time' in x.dims: x = x.isel(time=0)
@@ -87,9 +89,9 @@ def main(varname, plotname, *datafiles, gridfile=None, time_index=None,
     if vmin is None: vmin = data.min().values
     if vmax is None: vmax = data.max().values
     if float(vmin) < 0 and float(vmax) > 0:
-        *__, clevels = nice_cntr_levels(float(vmin), float(vmax), returnLevels=True, max_steps=13, aboutZero=True)
+        *__, clevels = nice_cntr_levels(float(vmin), float(vmax), returnLevels=True, max_steps=ncontours, aboutZero=True)
     else:
-        *__, clevels = nice_cntr_levels(float(vmin), float(vmax), returnLevels=True, max_steps=13)
+        *__, clevels = nice_cntr_levels(float(vmin), float(vmax), returnLevels=True, max_steps=ncontours)
     kwargs['cnLevels'] = clevels #get_contour_levels(data)
     kwargs['cnLevelSelectionMode'] = 'ExplicitLevels'
 
