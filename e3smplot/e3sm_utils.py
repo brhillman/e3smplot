@@ -453,21 +453,21 @@ def get_data(dataset, field):
         else:
             raise RuntimeError('Cannot get rad_heating_pdel')
     elif field == 'LW_flux_up':
-        data = get_data(dataset, 'FUL')
+        if field not in dataset.variables.keys(): data = get_data(dataset, 'FUL')
     elif field == 'LW_flux_dn':
-        data = get_data(dataset, 'FDL')
+        if field not in dataset.variables.keys(): data = get_data(dataset, 'FDL')
     elif field == 'SW_flux_up':
-        data = get_data(dataset, 'FUS')
+        if field not in dataset.variables.keys(): data = get_data(dataset, 'FUS')
     elif field == 'SW_flux_dn':
-        data = get_data(dataset, 'FDS')
+        if field not in dataset.variables.keys(): data = get_data(dataset, 'FDS')
     elif field == 'LW_clrsky_flux_up':
-        data = get_data(dataset, 'FULC')
+        if field not in dataset.variables.keys(): data = get_data(dataset, 'FULC')
     elif field == 'LW_clrsky_flux_dn':
-        data = get_data(dataset, 'FDLC')
+        if field not in dataset.variables.keys(): data = get_data(dataset, 'FDLC')
     elif field == 'SW_clrsky_flux_up':
-        data = get_data(dataset, 'FUSC')
+        if field not in dataset.variables.keys(): data = get_data(dataset, 'FUSC')
     elif field == 'SW_clrsky_flux_dn':
-        data = get_data(dataset, 'FDSC')
+        if field not in dataset.variables.keys(): data = get_data(dataset, 'FDSC')
     elif field == 'FUL':
         data = get_data(dataset, 'LW_flux_up')
     elif field == 'FDL':
@@ -543,13 +543,55 @@ def get_data(dataset, field):
         data = sw_clrsky_flux_dn - sw_clrsky_flux_up
         data.attrs = sw_clrsky_flux_up.attrs
         data.attrs['long_name'] = 'SW clrsky flux net'
-    elif field.lower() == 'sw_cloud_radiative_effect':
-        SW_flux_net = get_data(dataset, 'SW_flux_net')
-        SW_clrsky_flux_net = get_data(dataset, 'SW_clrsky_flux_net')
+    elif field.lower() == 'sw_flux_net@tom':
+        sw_flux_up = get_data(dataset, 'SW_flux_up@tom')
+        sw_flux_dn = get_data(dataset, 'SW_flux_dn@tom')
+        data = sw_flux_dn - sw_flux_up
+        data.attrs = sw_flux_up.attrs
+        data.attrs['long_name'] = 'SW flux net'
+    elif field.lower() == 'sw_clrsky_flux_net@tom':
+        sw_clrsky_flux_up = get_data(dataset, 'SW_clrsky_flux_up@tom')
+        if 'SW_clrsky_flux_dn@tom' in dataset.variables.keys():
+            sw_clrsky_flux_dn = get_data(dataset, 'SW_clrsky_flux_dn@tom')
+        else:
+            sw_clrsky_flux_dn = get_data(dataset, 'SW_flux_dn@tom')
+        data = sw_clrsky_flux_dn - sw_clrsky_flux_up
+        data.attrs = sw_clrsky_flux_up.attrs
+        data.attrs['long_name'] = 'SW clrsky flux net'
+    elif field.lower() == 'sw_cloud_radiative_effect@tom':
+        SW_flux_net = get_data(dataset, 'SW_flux_net@tom')
+        SW_clrsky_flux_net = get_data(dataset, 'SW_clrsky_flux_net@tom')
         data = SW_flux_net - SW_clrsky_flux_net
         data.attrs = SW_flux_net.attrs
         data.attrs['long_name'] = 'SW CRE'
-
+    elif field.lower() == 'lw_flux_net@tom':
+        lw_flux_up = get_data(dataset, 'LW_flux_up@tom')
+        lw_flux_dn = get_data(dataset, 'LW_flux_dn@tom')
+        data = lw_flux_dn - lw_flux_up
+        data.attrs = lw_flux_up.attrs
+        data.attrs['long_name'] = 'LW flux net'
+    elif field.lower() == 'lw_clrsky_flux_net@tom':
+        lw_clrsky_flux_up = get_data(dataset, 'LW_clrsky_flux_up@tom')
+        lw_clrsky_flux_dn = get_data(dataset, 'LW_clrsky_flux_dn@tom')
+        data = lw_clrsky_flux_dn - lw_clrsky_flux_up
+        data.attrs = lw_clrsky_flux_up.attrs
+        data.attrs['long_name'] = 'LW clrsky flux net'
+    elif field.lower() == 'lw_cloud_radiative_effect@tom':
+        LW_flux_net = get_data(dataset, 'LW_flux_net@tom')
+        LW_clrsky_flux_net = get_data(dataset, 'LW_clrsky_flux_net@tom')
+        data = LW_flux_net - LW_clrsky_flux_net
+        data.attrs = LW_flux_net.attrs
+        data.attrs['long_name'] = 'LW CRE'
+    elif field.lower() == 'lw_flux_dn@tom':
+        LW_flux_up = get_data(dataset, 'LW_flux_up@tom')
+        data = 0.0 * LW_flux_up
+        data.attrs = LW_flux_up.attrs
+        data.attrs['long_name'] = 'LW flux dn (zero)'
+    elif field.lower() == 'lw_clrsky_flux_dn@tom':
+        LW_flux_up = get_data(dataset, 'LW_clrsky_flux_up@tom')
+        data = 0.0 * LW_flux_up
+        data.attrs = LW_flux_up.attrs
+        data.attrs['long_name'] = 'LW clrsky flux dn (zero)'
 
     # Automatically grab top or bottom by appending _toa or _sfc to field name
     elif field[-4:] in ('_sfc', '@sfc'):
@@ -559,7 +601,7 @@ def get_data(dataset, field):
         elif 'lev' in data.dims:
             data = data.isel(lev=-1)
         else:
-            raise RuntimeError(f'Not sure what to do with dims {data.dims}')
+            raise RuntimeError(f'Not sure what to do with dims {data.dims} for field {field}')
         data.attrs['long_name'] = data.attrs['long_name'] + ' at surface'
     elif field[-4:] in ('_toa', '_tom', '@toa', '@tom'):
         data = get_data(dataset, field[:-4])
@@ -568,7 +610,7 @@ def get_data(dataset, field):
         elif 'lev' in data.dims:
             data = data.isel(lev=0)
         else:
-            raise RuntimeError(f'Not sure what to do with dims {data.dims}')
+            raise RuntimeError(f'Not sure what to do with dims {data.dims} for field {field}')
         data.attrs['long_name'] = data.attrs['long_name'] + ' at TOM'
 
     # Look for lower case or upper case versions of variable name if we did not
