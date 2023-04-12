@@ -70,7 +70,6 @@ def get_contour_levels(data_arrays, percentile=2, **kwargs):
 def animate_frames(outputfile, frames, **kwargs):
     print('Stitching %i frames together...'%(len(frames)), end='')
     sys.stdout.flush()
-    print(frames)
     images = [imageio.imread(frame) for frame in frames]
     imageio.mimsave(outputfile, images, **kwargs)
     print('Done.'); sys.stdout.flush()
@@ -105,13 +104,13 @@ def update_progress(iteration, num_iterations, bar_length=10):
     sys.stdout.flush()
 
 
-def main(variable_name, outputfile, gridfile, *inputfiles, **kwargs):
+def main(variable_name, outputfile, gridfile, *inputfiles, keep_frames=False, **kwargs):
     import xarray
     import gc
 
     # Open files
     print('Open files...'); sys.stdout.flush()
-    ds_grid = xarray.open_dataset(gridfile)
+    ds_grid = xarray.open_dataset(gridfile).rename({'grid_size': 'ncol'})
     ds_data = xarray.open_mfdataset(*inputfiles)
 
     # Get data
@@ -120,34 +119,53 @@ def main(variable_name, outputfile, gridfile, *inputfiles, **kwargs):
     lon  = get_data(ds_grid, 'grid_corner_lon')
     lat  = get_data(ds_grid, 'grid_corner_lat')
 
-    # Get mins and maxes
-    print('Get mins and maxes over dataset...'); sys.stdout.flush()
-    minval = data.min().values
-    maxval = data.max().values
-    print(f'Data range: {minval} to {maxval}')
+    # Select data
+    if 'time_indices' in kwargs.keys():
+        time_indices = kwargs.pop('time_indices')
+        data = data.isel(time=time_indices)
+
+    # Subset data
+    if 'latmin' in kwargs:
+        latmin = kwargs.pop('latmin')
+        mask = get_data(ds_grid, 'grid_center_lat') > latmin
+        data = data.where(mask, drop=True)
+        lon  = lon.where(mask, drop=True)
+        lat  = lat.where(mask, drop=True)
+
+    # Pull out keyward args
+    animate_kw = {}
+    for key in ('time_per_frame',):
+        if key in kwargs.keys():
+            animate_kw[key] = kwargs.pop(key)
 
     # Get contour levels
-    print('Get contour levels...'); sys.stdout.flush()
-    *__, clevels = nice_cntr_levels(minval, maxval, returnLevels=True, max_steps=13)
-    kwargs['cnLevels'] = clevels #get_contour_levels(data)
-    kwargs['cnLevelSelectionMode'] = 'ExplicitLevels'
+    if 'cnLevels' not in kwargs.keys():
+        print('Get contour levels...'); sys.stdout.flush()
+        *__, clevels = nice_cntr_levels(data.min().values, data.max().values, returnLevels=True, max_steps=13)
+        kwargs['cnLevels'] = clevels #get_contour_levels(data)
+        kwargs['cnLevelSelectionMode'] = 'ExplicitLevels'
 
     # Loop
-    ntime = len(ds_data.time)
+    ntime = len(data.time)
     print('Looping over %i time indices'%ntime); sys.stdout.flush()
     frames = []
     for i in range(ntime):
         gc.collect()
-        plot_name = f'{os.path.dirname(outputfile)}/tmp_frames/{variable_name}.{i}.png'
+        plot_name = f'{os.path.dirname(outputfile)}/tmp_frames/{os.path.basename(outputfile)}.{i}.png'
         os.makedirs(os.path.dirname(plot_name), exist_ok=True)
-        frames.append(plot_frame(lon, lat, data.isel(time=i), plot_name, **kwargs))
+        if os.path.exists(plot_name):
+            print(f'{plot_name} exists, skipping.')
+        else:
+            f = plot_frame(lon, lat, data.isel(time=i), plot_name, **kwargs)
+        frames.append(plot_name)
         update_progress(i, ntime, bar_length=10)
+    print('')
 
     # Stitch together frames into single animation
     animate_frames(outputfile, frames, **animate_kw)
 
     # Clean up
-    remove_frames(frames)
+    if not keep_frames: remove_frames(frames)
 
 
 if __name__ == '__main__':
