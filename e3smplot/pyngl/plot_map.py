@@ -46,6 +46,16 @@ def plot_map(wks, x, y, data, **kwargs):
     return plot
 
 
+def plot_map_fig(x, y, data, plotname, **kwargs):
+    # Setup the canvas
+    wks = ngl.open_wks(
+        os.path.splitext(plotname)[1][1:],
+        os.path.splitext(plotname)[0]
+    )
+    # Make the plot
+    return plot_map(wks, x, y, data, **kwargs)
+
+
 def main(varname, plotname, *datafiles, gridfile=None, time_index=None,
         vmin=None, vmax=None, **kwargs):
 
