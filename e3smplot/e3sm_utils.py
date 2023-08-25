@@ -877,6 +877,8 @@ def infer_grid_file(ds, mapping_root=None):
         grid_file = f'{mapping_root}/grids/ne30pg2_scrip_20200209.nc'
     elif ncol == 48602:  # ne30np4
         grid_file = f'{mapping_root}/grids/ne30np4_pentagons.091226.nc'
+    elif ncol == 345600: # ne120pg2
+        grid_file = f'{mapping_root}/grids/ne120pg2_scrip_c20191218.nc'
     else:
         raise RuntimeError(f"Grid with ncol = {ncol} unknown.")
     return grid_file
