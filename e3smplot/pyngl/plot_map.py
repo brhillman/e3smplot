@@ -115,7 +115,6 @@ def main(varname, plotname, *datafiles, gridfile=None, time_index=None,
         wks, x.values, y.values, data.values,
         mpGeophysicalLineColor='white',
         lbOrientation='horizontal', 
-        cnFillMode='RasterFill',
         cnLineLabelsOn=False, cnLinesOn=False, **kwargs
     )
 
