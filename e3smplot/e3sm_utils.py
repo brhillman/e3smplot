@@ -225,9 +225,12 @@ def get_data(dataset, field):
             warnings.warn('Using FSNTOA instead of FSNT')
         except:
             pass
-    elif field == 'FLNT':
+    elif field == 'FLNT': # or field == 'LW_flux_up_at_model_top':
         if 'toa_lw_all_3h' in dataset.variables.keys():
             data = dataset['toa_lw_all_3h']
+            data.attrs['long_name'] = 'Longwave flux at TOA'
+        elif 'toa_lw_all_daily' in dataset.variables.keys():
+            data = dataset['toa_lw_all_daily']
             data.attrs['long_name'] = 'Longwave flux at TOA'
     elif field == 'FLNTC':
         if 'toa_lw_clr_3h' in dataset.variables.keys():
@@ -290,6 +293,17 @@ def get_data(dataset, field):
         data = get_ice_cld_area(dataset)
     elif field == 'TOT_CLD_AREA':
         data = get_tot_cld_area(dataset)
+
+    # ISCCP cloud types
+    elif field == 'isccp_cldtot_masked_average':
+        if 'isccp_cldtot' in dataset.variables.keys():
+            masked_data = get_data(dataset, 'isccp_cldtot')
+        if 'isccp_mask' in dataset.variables.keys():
+            mask_weights = get_data(dataset, 'isccp_mask')
+        else:
+            raise RuntimeError('isccp_mask not found to compute masked average')
+        data = masked_data / mask_weights
+        data.attrs = masked_data.attrs
 
     # Derived MISR cloud types
     elif field == 'CLDTOT_MISR':
@@ -505,6 +519,15 @@ def get_data(dataset, field):
         data.attrs['long_name'] = data.attrs['long_name'] + ' at surface'
     elif field[-4:] == '_toa' or field[-4:] == '_tom':
         data = get_data(dataset, field[:-4])
+        if 'ilev' in data.dims:
+            data = data.isel(ilev=0)
+        elif 'lev' in data.dims:
+            data = data.isel(lev=0)
+        else:
+            raise RuntimeError(f'Not sure what to do with dims {data.dims}')
+        data.attrs['long_name'] = data.attrs['long_name'] + ' at TOM'
+    elif field[-13:] == '_at_model_top':
+        data = get_data(dataset, field[:-13])
         if 'ilev' in data.dims:
             data = data.isel(ilev=0)
         elif 'lev' in data.dims:
@@ -879,6 +902,8 @@ def infer_grid_file(ds, mapping_root=None):
         grid_file = f'{mapping_root}/grids/ne30np4_pentagons.091226.nc'
     elif ncol == 345600: # ne120pg2
         grid_file = f'{mapping_root}/grids/ne120pg2_scrip_c20191218.nc'
+    elif ncol == 25165824: # ne1024pg2
+        grid_file = f'{mapping_root}/grids/ne1024pg2_scrip_20221011.nc'
     else:
         raise RuntimeError(f"Grid with ncol = {ncol} unknown.")
     return grid_file
@@ -899,6 +924,8 @@ def get_area_weights(ds):
     # Get weights; either use pre-computed or cosine(latitude) weights
     if 'area' in ds.variables.keys():
         wgt = ds['area']
+    if 'area_PG2' in ds.variables.keys():
+        wgt = ds['area_PG2']
     elif 'grid_area' in ds.variables.keys():
         wgt = ds['grid_area']
     else:
