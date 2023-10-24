@@ -924,7 +924,7 @@ def get_area_weights(ds):
     # Get weights; either use pre-computed or cosine(latitude) weights
     if 'area' in ds.variables.keys():
         wgt = ds['area']
-    if 'area_PG2' in ds.variables.keys():
+    elif 'area_PG2' in ds.variables.keys():
         wgt = ds['area_PG2']
     elif 'grid_area' in ds.variables.keys():
         wgt = ds['grid_area']
