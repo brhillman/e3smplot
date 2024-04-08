@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-import plac, numpy
+import plac, numpy, xarray
 from matplotlib import pyplot
 from matplotlib.tri import Triangulation
 from cartopy import crs
 from cartopy.util import add_cyclic_point
-from xarray import open_mfdataset, open_dataset
 from time import perf_counter
 from scipy.interpolate import griddata
-from e3smplot.e3sm_utils import infer_grid_file, infer_grid_coords
+from e3smplot.e3sm_utils import infer_grid_file, infer_grid_coords, get_data
 
 
 def open_files(*inputfiles):
@@ -23,28 +22,6 @@ def fix_longitudes(lon):
     return ((lon + 180) % 360) - 180 #numpy.where(lon > 180, lon - 360, lon))
 
 
-def get_data(ds, variable_name):
-    if variable_name in ds.variables.keys():
-        data = ds[variable_name]
-    elif variable_name == 'PRECT':
-        precc = get_data(ds, 'PRECC')
-        precl = get_data(ds, 'PRECL')
-        data = precc + precl
-        data.attrs = precc.attrs
-        data.attrs['long_name'] = 'Total precipitation rate'
-    else:
-        raise NameError('%s not found in dataset'%variable_name)
-
-    # Adjust units
-    if variable_name in ('PRECC', 'PRECL', 'PRECT'):
-        if data.attrs['units'].lower() == 'm/s':
-            attrs = data.attrs
-            data = 60 * 60 * 24 * 1e3 * data
-            data.attrs = attrs
-            data.attrs['units'] = 'mm/day'
-    return data
-
-
 def plot_map(lon, lat, data, axes=None,
         plot_method='regrid', nlon=360, nlat=180, draw_colorbar=True,
         cb_kwargs={'pad': 0.02, 'shrink': 0.8, 'orientation': 'horizontal'}, **kwargs):
@@ -55,7 +32,7 @@ def plot_map(lon, lat, data, axes=None,
 
     # Draw coastlines on map, only works on GeoAxes
     try:
-        axes.coastlines(color='black')
+        axes.coastlines(color='white')
         axes.set_global()
     except:
         pass
@@ -64,7 +41,7 @@ def plot_map(lon, lat, data, axes=None,
     lon = fix_longitudes(lon)
 
     # Plot data
-    if 'ncol' in data.dims:
+    if len(data.shape) == 1:
         if plot_method == 'triangulation':
             # Calculate triangulation
             triangulation = Triangulation(lon.values, lat.values)
@@ -81,15 +58,18 @@ def plot_map(lon, lat, data, axes=None,
             pl = axes.pcolormesh(xi, yi, data_regridded, **kwargs)
         else:
             raise ValueError('method %s not known; please choose one of triangulation or regrid'%method)
-    elif ('lon' in data.dims) and ('lat' in data.dims):
+    elif len(data.shape) == 2:
         # Need to add a cyclic point
         #_data, _lon = add_cyclic_point(data.transpose('lat', 'lon').values, coord=lon.values)
+        # Figure out dim indices for lon, lat to transpose
+        transpose_dims = data.dims[data.shape.index(len(lat))], data.dims[data.shape.index(len(lon))]
         pl = axes.pcolormesh(
-            lon, lat, data.transpose('lat', 'lon'),
-            **kwargs
+            lon, lat, data.transpose(*transpose_dims),
+            transform=crs.PlateCarree(), **kwargs
         )
     else:
         raise ValueError('Dimensions invalid.')
+
 
     # Label plot
     if 'time' in data.dims:
@@ -102,6 +82,7 @@ def plot_map(lon, lat, data, axes=None,
     if draw_colorbar:
         cb = pyplot.colorbar(
             pl, ax=axes,
+            label=f'{data.long_name} ({data.units})',
             **cb_kwargs,
         )
     else:
@@ -127,9 +108,13 @@ def plot_maps(coords, data_arrays, labels, figshape=None, figsize=None, subplot_
     return figure
 
 
-def main(varname, outputfile, *inputfiles, **kwargs):
+def open_dataset(f, **kwargs):
+    return xarray.open_mfdataset(f, data_vars='minimal', coords='minimal', compat='override')
 
-    print(f'Plot {varname} to {outputfile}...')
+
+def main(varnames, outputfile, *inputfiles, **kwargs):
+
+    print(f'Plot {varnames} to {outputfile}...')
     #
     # Open dataset and compute time average if needed
     #
@@ -137,20 +122,20 @@ def main(varname, outputfile, *inputfiles, **kwargs):
     #
     # Read selected data from file
     #
-    data_arrays = [get_data(ds, varname) for ds in datasets]
-    lons, lats, lon_corners, lat_corners =  zip(*[infer_grid_coords(ds) for ds in datasets])
+    data_arrays = [get_data(ds, varname) for varname, ds in zip(varnames, datasets)]
+    lons, lats = zip(*[(get_data(ds, 'longitude'), get_data(ds, 'latitude')) for ds in datasets])
     #
     # Reduce data
     #
     data_arrays = [da.mean(dim='time', keep_attrs=True) for da in data_arrays]
-    # TODO: apply vertical reduction here
+    #
     #
     # Make figure
     #
-    figure, axes = pyplot.subplots(len(inputfiles), 1, subplot_kw=dict(projection=crs.PlateCarree(central_longitude=180)))
+    figure, axes = pyplot.subplots(len(inputfiles), 1, figsize=(8, 11), subplot_kw=dict(projection=crs.PlateCarree(central_longitude=180)))
     for icase, (lon, lat, data) in enumerate(zip(lons, lats, data_arrays)):
         ax = figure.add_axes(axes[icase])
-        pl, cb = plot_map(lon, lat, data, **kwargs)
+        pl, cb = plot_map(lon, lat, data, transform=crs.PlateCarree(), **kwargs)
     #
     # Save figure
     #
