@@ -64,6 +64,7 @@ def plot_image_gdal(
     # NOTE: pyngl will complain about these for the non-map plots,
     # but I want everything set ahead of time so that I can override
     # with kwargs passed into this function
+    mapres.mpFillBoundarySets = "NoBoundaries"
     mapres.mpFillOn         = False
     mapres.mpGridAndLimbOn  = False
     mapres.mpProjection     = "Orthographic"
@@ -113,7 +114,7 @@ def main(inputfile, outputfile, **kwargs):
     # Plot image
     # mpCenterLonF=150 for Pacific; 340 for Atlantic; 200 Pacific v2
     # mpCenterLatF=30 for Pacific; 45 for Atlantic; 40 Pacific v2
-    pl = plot_image_gdal(wks, band1, band2, band3, mpCenterLonF=340, mpCenterLatF=45)
+    pl = plot_image_gdal(wks, band1, band2, band3, **kwargs)
 
     # Finalize plot
     ngl.frame(wks)
